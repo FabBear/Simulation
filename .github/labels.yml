@@ -1,0 +1,47 @@
+- name: "✨ Feature"
+  color: "B0F207"
+  description: "신규 기능 또는 파이프라인 구현"
+
+- name: "🐞 BugFix"
+  color: "d73a4a"
+  description: "버그, 에러 수정"
+
+- name: "🤖 Model"
+  color: "0AC3B0"
+  description: "모델 구조, 알고리즘, 학습 관련 변경"
+
+- name: "📊 Data"
+  color: "5319E7"
+  description: "데이터 수집, 전처리, 검증 관련 작업"
+
+- name: "🔬 Experiment"
+  color: "E76923"
+  description: "실험, 하이퍼파라미터 탐색"
+
+- name: "⚙️ Pipeline"
+  color: "D4C5F9"
+  description: "학습·추론·배포 파이프라인 관련 작업"
+
+- name: "⚙️ Infra"
+  color: "BFD4F2"
+  description: "Docker, CI/CD, 환경 설정 작업"
+
+- name: "🛠️ Refactor"
+  color: "A85C44"
+  description: "코드 리팩토링"
+
+- name: "🧹 Chore"
+  color: "C2E0C6"
+  description: "빌드, 패키지, 설정 등 관리 작업"
+
+- name: "📄 Docs"
+  color: "0075ca"
+  description: "문서 수정"
+
+- name: "🔥 Hotfix"
+  color: "FF6B35"
+  description: "긴급 수정"
+
+- name: "🚧 Not Ready for Review"
+  color: "8d42a3"
+  description: "작업 중인 PR입니다. 완료 후 리뷰 부탁드려요."

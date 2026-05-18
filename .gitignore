@@ -1,0 +1,62 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+.eggs/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# ML artifacts (대용량 파일 — DVC나 S3로 관리)
+*.pkl
+*.joblib
+*.pt
+*.pth
+*.h5
+*.onnx
+*.ckpt
+checkpoints/
+models/
+
+# Experiment tracking
+mlruns/
+mlartifacts/
+wandb/
+.neptune/
+
+# Data files (대용량 — DVC나 S3로 관리)
+data/raw/
+data/processed/
+*.parquet
+*.feather
+
+# Test / coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Lint / type check
+.ruff_cache/
+.mypy_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+logs/
+*.log

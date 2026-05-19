@@ -1,0 +1,11 @@
+{
+  "action_id": "a-001",
+  "action_type": "EXPEDITE",
+  "target_machine": "Litho_02",
+  "expires_at": 300.0,
+  "parameters": {
+    "target_product": "Product_A",
+    "ratio": 0.5,
+    "max_priority_boost": 5
+  }
+}

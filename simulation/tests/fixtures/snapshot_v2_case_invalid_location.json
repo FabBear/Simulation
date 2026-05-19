@@ -1,0 +1,29 @@
+{
+  "snapshot_version": "2.0",
+  "anchor_epoch_sec": 1713000000.0,
+  "sim_now_min": 120.0,
+  "machines": [
+    {
+      "tool_id": "Litho_02",
+      "state": "IDLE",
+      "current_setup": "Gas_A",
+      "busy_until_sim_min": 120.0,
+      "down_until_sim_min": null,
+      "current_lot_id": null,
+      "queue_lot_ids": []
+    }
+  ],
+  "lots": [
+    {
+      "lot_id": "L_999",
+      "product": "Product_A",
+      "route_id": "Route_Product_A",
+      "step_seq": 10,
+      "status": "QUEUE",
+      "location_type": "MACHINE_QUEUE",
+      "location_id": "Litho_X",
+      "arrival_time_sim_min": 10.0,
+      "cqt_deadline_sim_min": null
+    }
+  ]
+}

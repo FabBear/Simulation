@@ -1,0 +1,49 @@
+{
+  "snapshot_version": "2.0",
+  "anchor_epoch_sec": 1713000000.0,
+  "sim_now_min": 120.0,
+  "machines": [
+    {
+      "tool_id": "Litho_02",
+      "state": "IDLE",
+      "current_setup": "Gas_A",
+      "busy_until_sim_min": 120.0,
+      "down_until_sim_min": null,
+      "current_lot_id": null,
+      "queue_lot_ids": ["L_100"]
+    },
+    {
+      "tool_id": "Litho_03",
+      "state": "RUN",
+      "current_setup": "Gas_B",
+      "busy_until_sim_min": 130.0,
+      "down_until_sim_min": null,
+      "current_lot_id": "L_101",
+      "queue_lot_ids": []
+    }
+  ],
+  "lots": [
+    {
+      "lot_id": "L_100",
+      "product": "Product_A",
+      "route_id": "Route_Product_A",
+      "step_seq": 19,
+      "status": "QUEUE",
+      "location_type": "MACHINE_QUEUE",
+      "location_id": "Litho_02",
+      "arrival_time_sim_min": 118.0,
+      "cqt_deadline_sim_min": 300.0
+    },
+    {
+      "lot_id": "L_101",
+      "product": "Product_A",
+      "route_id": "Route_Product_A",
+      "step_seq": 20,
+      "status": "PROCESSING",
+      "location_type": "MACHINE_PROCESS",
+      "location_id": "Litho_03",
+      "arrival_time_sim_min": 100.0,
+      "cqt_deadline_sim_min": 350.0
+    }
+  ]
+}

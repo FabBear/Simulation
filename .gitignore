@@ -1,0 +1,10 @@
+.env
+.DS_Store
+**/__pycache__/
+**/*.pyc
+simulation/.venv/
+simulation/sim_csv_out/
+simulation/sim_csv_*/
+simulation/logs/
+spring-backend/build/
+spring-backend/.gradle/

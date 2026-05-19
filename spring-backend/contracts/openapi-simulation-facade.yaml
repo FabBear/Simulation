@@ -1,0 +1,118 @@
+openapi: 3.0.3
+info:
+  title: Semi Fab Simulation Facade API
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+paths:
+  /:
+    get:
+      summary: Service health
+      responses:
+        '200':
+          description: OK
+  /api/status:
+    get:
+      summary: Get simulation status
+      responses:
+        '200':
+          description: Status payload
+  /api/step:
+    post:
+      summary: Progress one step
+      parameters:
+        - in: query
+          name: mode
+          schema:
+            type: string
+            enum: [sequential, parallel]
+            default: sequential
+      responses:
+        '200':
+          description: Status payload
+  /api/v1/simulate/what-if:
+    post:
+      summary: Run baseline/action what-if simulation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [snapshot]
+              properties:
+                snapshot:
+                  type: object
+                action:
+                  type: object
+                horizon_min:
+                  type: number
+                  default: 720
+                master_seed:
+                  type: integer
+                  default: 42
+                mode:
+                  type: string
+                  enum: [sequential, parallel]
+                  default: sequential
+      responses:
+        '200':
+          description: What-if result with metrics and delta
+  /api/control/reset:
+    post:
+      summary: Reset simulation
+      responses:
+        '200':
+          description: Status payload
+  /api/control/pause:
+    post:
+      summary: Pause simulation
+      responses:
+        '200':
+          description: Status payload
+  /api/control/resume:
+    post:
+      summary: Resume simulation
+      responses:
+        '200':
+          description: Status payload
+  /api/dispatch:
+    post:
+      summary: Manual dispatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action_idx]
+              properties:
+                action_idx:
+                  type: integer
+      responses:
+        '200':
+          description: Status payload
+  /api/layout:
+    get:
+      summary: Get machine layout
+      responses:
+        '200':
+          description: Layout map
+  /api/debug/ui-event:
+    post:
+      summary: Debug UI event ingest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+  /api/debug/file-write-check:
+    get:
+      summary: Check backend log file writeability
+      responses:
+        '200':
+          description: OK

@@ -1,9 +1,16 @@
 # models.py
 
 # 1. 필요한 도구(라이브러리)들을 꺼내옵니다.
-from sqlalchemy import Column, String, Integer, Boolean, Float, Text, DateTime
+from sqlalchemy import (
+    Column, String, Integer, Boolean, Float, Text, DateTime, Date,
+    ForeignKey, BigInteger, UniqueConstraint, Index,
+)
 from datetime import datetime
 from sqlalchemy.orm import declarative_base  # .ext.declarative 대신 .orm 사용
+try:
+    from sqlalchemy.dialects.postgresql import JSONB
+except ImportError:
+    JSONB = Text  # fallback for non-Postgres dev
 # 2. 설계도 용지를 한 장 꺼냅니다. (이게 있어야 설계를 시작합니다)
 Base = declarative_base()
 
@@ -75,8 +82,10 @@ class ProcessStep(Base):
     rework_target_step = Column(Integer, nullable=True)
     sampling_prob = Column(Float, default=100.0)
 
-    # CQT (시간 제한)
-    cqt_start_step = Column(Integer, nullable=True)
+    # CQT (Critical Queue Time) — anchor row STEP=n, target STEP FOR CRITICAL QUEUE TIME=m
+    cqt_anchor_step = Column(Integer, nullable=True)
+    cqt_target_step = Column(Integer, nullable=True)
+    cqt_start_step = Column(Integer, nullable=True)  # legacy alias of cqt_target_step
     cqt_limit = Column(Float, nullable=True)
     cqt_unit = Column(String, nullable=True)
     
@@ -311,3 +320,224 @@ class KpiSnapshot(Base):
     numerator = Column(Float, nullable=True)
     denominator = Column(Float, nullable=True)
     meta = Column(Text, nullable=True)                 # optional JSON string (TEXT to match Flyway)
+
+
+# -----------------------------------------------------------
+# MES FORWARD / WHAT-IF (input) — FabEnv scenario reset
+# DDL: V001 (snapshots) + V002 mes_forward_whatif.sql
+# Docs: docs/MES_FORWARD_WHATIF_SCHEMA.md
+# -----------------------------------------------------------
+class MesScenario(Base):
+    __tablename__ = "mes_scenario"
+
+    scenario_id = Column(String(64), primary_key=True)
+    description = Column(Text, nullable=True)
+    source_system = Column(String(128), nullable=True)
+    mes_extract_batch_id = Column(String(128), nullable=True)
+    t0_sim_minute = Column(Float, nullable=False)
+    horizon_minutes = Column(Float, nullable=False)
+    sim_start_calendar = Column(Date, nullable=True)
+    mode = Column(String(32), nullable=False, default="FORWARD")  # FORWARD | WHATIF
+    master_snapshot_hash = Column(String(64), nullable=True)
+    baseline_scenario_id = Column(
+        String(64), ForeignKey("mes_scenario.scenario_id", ondelete="SET NULL"), nullable=True
+    )
+    trigger_meta = Column(JSONB, nullable=True)
+    use_master_lot_release = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_by = Column(String(128), nullable=True)
+    status = Column(String(32), nullable=False, default="DRAFT")  # DRAFT|VALIDATED|RUNNING|DONE
+
+
+class MesForwardInputEvent(Base):
+    """Sparse forward inputs (HOLD/RELEASE/FAB_ARRIVAL). Not full TRACK_IN grid."""
+
+    __tablename__ = "mes_forward_input_event"
+    __table_args__ = (
+        Index("ix_mes_forward_input_scenario_time", "scenario_id", "scheduled_time"),
+        Index("ix_mes_forward_input_scenario_lot", "scenario_id", "lot_id"),
+    )
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    scenario_id = Column(String(64), ForeignKey("mes_scenario.scenario_id", ondelete="CASCADE"), nullable=False)
+    seq = Column(Integer, nullable=False, default=0)
+    lot_id = Column(String(128), nullable=False)
+    route_id = Column(String(128), nullable=False)
+    step_seq = Column(Integer, nullable=True)
+    event_kind = Column(String(32), nullable=False)  # FAB_ARRIVAL | HOLD | RELEASE
+    scheduled_time = Column(Float, nullable=False)
+    tool_group = Column(String(128), nullable=True)
+    tool_id = Column(String(128), nullable=True)
+    priority = Column(Integer, nullable=True)
+    due_date_sim = Column(Float, nullable=True)
+    mes_row_hash = Column(String(64), nullable=True)
+    source_line_no = Column(Integer, nullable=True)
+    note = Column(Text, nullable=True)
+
+
+class MesLotReleasePlan(Base):
+    """Lot releases in [t0, t0 + horizon] for FORWARD runs."""
+
+    __tablename__ = "mes_lot_release_plan"
+    __table_args__ = (Index("ix_mes_lot_release_scenario_time", "scenario_id", "release_time"),)
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    scenario_id = Column(String(64), ForeignKey("mes_scenario.scenario_id", ondelete="CASCADE"), nullable=False)
+    source_lot_release_id = Column(Integer, nullable=True)
+    product_name = Column(String(128), nullable=False)
+    route_name = Column(String(128), nullable=False)
+    release_time = Column(Float, nullable=False)
+    lots_count = Column(Integer, nullable=False, default=1)
+    release_interval = Column(Float, nullable=True)
+    lot_name_prefix = Column(String(128), nullable=True)
+    lot_type = Column(String(128), nullable=True)
+    priority = Column(Integer, nullable=True)
+    due_date_sim = Column(Float, nullable=True)
+    wafers_per_lot = Column(Integer, nullable=True)
+    is_super_hot = Column(Boolean, nullable=False, default=False)
+    mes_row_hash = Column(String(64), nullable=True)
+    source_line_no = Column(Integer, nullable=True)
+
+
+class MesWhatifAction(Base):
+    """WHAT-IF overrides only (Agent / operator)."""
+
+    __tablename__ = "mes_whatif_action"
+    __table_args__ = (Index("ix_mes_whatif_scenario_time", "scenario_id", "effective_time"),)
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    scenario_id = Column(String(64), ForeignKey("mes_scenario.scenario_id", ondelete="CASCADE"), nullable=False)
+    seq = Column(Integer, nullable=False, default=0)
+    action_kind = Column(String(64), nullable=False)
+    effective_time = Column(Float, nullable=False)
+    lot_id = Column(String(128), nullable=True)
+    route_id = Column(String(128), nullable=True)
+    step_seq = Column(Integer, nullable=True)
+    tool_group = Column(String(128), nullable=True)
+    tool_id = Column(String(128), nullable=True)
+    payload_json = Column(JSONB, nullable=True)
+    source = Column(String(32), nullable=False, default="AGENT")
+    mes_row_hash = Column(String(64), nullable=True)
+
+
+class MesOperatingEvent(Base):
+    """Optional MES operating calendar (SCRAP/REWORK/HOLD)."""
+
+    __tablename__ = "mes_operating_event"
+    __table_args__ = (Index("ix_mes_operating_scenario_time", "scenario_id", "scheduled_time"),)
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    scenario_id = Column(String(64), ForeignKey("mes_scenario.scenario_id", ondelete="CASCADE"), nullable=False)
+    seq = Column(Integer, nullable=False, default=0)
+    lot_id = Column(String(128), nullable=False)
+    route_id = Column(String(128), nullable=True)
+    step_seq = Column(Integer, nullable=True)
+    event_kind = Column(String(32), nullable=False)
+    scheduled_time = Column(Float, nullable=False)
+    payload_json = Column(JSONB, nullable=True)
+    mes_row_hash = Column(String(64), nullable=True)
+
+
+# -----------------------------------------------------------
+# WHAT-IF vs baseline KPI delta (simulation output)
+# DDL: simulation/sql/flyway/V003__kpi_whatif_diff.sql
+# -----------------------------------------------------------
+class KpiWhatifDiff(Base):
+    __tablename__ = "kpi_whatif_diff"
+    __table_args__ = (
+        Index("ix_kpi_whatif_diff_whatif_run", "whatif_run_id"),
+        Index("ix_kpi_whatif_diff_scenario_time", "whatif_scenario_id", "snapshot_time"),
+        Index("ix_kpi_whatif_diff_kpi", "whatif_scenario_id", "level", "scope", "kpi_name", "snapshot_time"),
+    )
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    whatif_scenario_id = Column(String(64), ForeignKey("mes_scenario.scenario_id", ondelete="CASCADE"), nullable=False)
+    baseline_scenario_id = Column(String(64), ForeignKey("mes_scenario.scenario_id", ondelete="SET NULL"), nullable=True)
+    baseline_run_id = Column(String(64), ForeignKey("simulation_run.run_id", ondelete="SET NULL"), nullable=True)
+    whatif_run_id = Column(String(64), ForeignKey("simulation_run.run_id", ondelete="CASCADE"), nullable=False)
+    level = Column(String(32), nullable=False)
+    scope = Column(String(256), nullable=False)
+    kpi_name = Column(String(128), nullable=False)
+    snapshot_time = Column(Float, nullable=False)
+    baseline_value = Column(Float, nullable=True)
+    whatif_value = Column(Float, nullable=True)
+    delta = Column(Float, nullable=True)
+    computed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class MesWipSnapshot(Base):
+    __tablename__ = "mes_wip_snapshot"
+    __table_args__ = (UniqueConstraint("scenario_id", "lot_id", name="uq_mes_wip_lot"),)
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    scenario_id = Column(String(64), ForeignKey("mes_scenario.scenario_id", ondelete="CASCADE"), nullable=False)
+    snapshot_time = Column(Float, nullable=False)
+    lot_id = Column(String(128), nullable=False)
+    route_id = Column(String(128), nullable=False)
+    current_step_seq = Column(Integer, nullable=False)
+    status = Column(String(32), nullable=False)  # QUEUING|PROCESSING|WAIT_TRANSPORT|HOLD|WAIT_BATCH
+    tool_group = Column(String(128), nullable=True)
+    tool_id = Column(String(128), nullable=True)
+    queue_position = Column(Integer, nullable=True)
+    due_date_sim = Column(Float, nullable=True)
+    priority = Column(Integer, nullable=True)
+    rem_steps = Column(Integer, nullable=True)
+    processing_remaining_min = Column(Float, nullable=True)
+    wafers_per_lot = Column(Integer, nullable=True)
+    product = Column(String(128), nullable=True)
+    is_super_hot = Column(Boolean, nullable=False, default=False)
+
+
+class MesToolSnapshot(Base):
+    __tablename__ = "mes_tool_snapshot"
+    __table_args__ = (UniqueConstraint("scenario_id", "tool_id", name="uq_mes_tool_snapshot"),)
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    scenario_id = Column(String(64), ForeignKey("mes_scenario.scenario_id", ondelete="CASCADE"), nullable=False)
+    tool_id = Column(String(128), nullable=False)
+    tool_group = Column(String(128), nullable=False)
+    op_state = Column(String(32), nullable=False)  # IDLE|RUN|SETUP|DOWN_PM|DOWN_BM
+    current_setup = Column(String(128), nullable=True)
+    held_lot_id = Column(String(128), nullable=True)
+
+
+class MesToolQueueSnapshot(Base):
+    __tablename__ = "mes_tool_queue_snapshot"
+    __table_args__ = (UniqueConstraint("scenario_id", "tool_id", "position", name="uq_mes_tool_queue_pos"),)
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    scenario_id = Column(String(64), ForeignKey("mes_scenario.scenario_id", ondelete="CASCADE"), nullable=False)
+    tool_id = Column(String(128), nullable=False)
+    position = Column(Integer, nullable=False)
+    lot_id = Column(String(128), nullable=False)
+    route_id = Column(String(128), nullable=True)
+    step_seq = Column(Integer, nullable=True)
+    due_date_sim = Column(Float, nullable=True)
+    priority = Column(Integer, nullable=True)
+
+
+class MesCqtSnapshot(Base):
+    __tablename__ = "mes_cqt_snapshot"
+    __table_args__ = (UniqueConstraint("scenario_id", "lot_id", name="uq_mes_cqt_lot"),)
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    scenario_id = Column(String(64), ForeignKey("mes_scenario.scenario_id", ondelete="CASCADE"), nullable=False)
+    lot_id = Column(String(128), nullable=False)
+    anchor_step = Column(Integer, nullable=True)
+    target_step = Column(Integer, nullable=False)
+    deadline_time = Column(Float, nullable=False)
+    started_at = Column(Float, nullable=False)
+
+
+class MesScenarioRun(Base):
+    __tablename__ = "mes_scenario_run"
+    __table_args__ = (
+        UniqueConstraint("scenario_id", "simulation_run_id", name="uq_mes_scenario_run"),
+    )
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    scenario_id = Column(String(64), ForeignKey("mes_scenario.scenario_id", ondelete="CASCADE"), nullable=False)
+    simulation_run_id = Column(String(64), ForeignKey("simulation_run.run_id", ondelete="CASCADE"), nullable=False)
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    finished_at = Column(DateTime, nullable=True)
+    validation_report = Column(JSONB, nullable=True)

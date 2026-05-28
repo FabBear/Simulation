@@ -7,6 +7,7 @@ import json
 import csv
 import os
 import threading
+from pathlib import Path
 from collections import defaultdict, deque, Counter
 from datetime import datetime
 import uuid
@@ -15,13 +16,15 @@ from database import SessionLocal
 from models import (
     ToolGroup, LotRelease, ProcessStep, SetupInfo, BreakdownEvent, PMEvent, TransportTime,
     SimulationLog, LotEventLog, ToolStateLog, ActiveCqtTimer, RealtimeWipSummary, KpiSnapshot,
+    SimulationRun,
+    MesScenario, MesScenarioRun,
+    MesWipSnapshot, MesToolSnapshot, MesToolQueueSnapshot, MesCqtSnapshot,
+    MesLotReleasePlan, MesWhatifAction,
 )
 
 SIM_START = datetime(2018, 1, 1, 0, 0, 0)
 DEBUG_LOG_PATH = (os.environ.get("DEBUG_LOG_PATH") or "").strip()
 AGENT_DEBUG_LOG_PATH = (os.environ.get("AGENT_DEBUG_LOG_PATH") or "").strip()
-
-
 def _agent_log(run_id, hypothesis_id, location, message, data):
     # region agent log
     if not DEBUG_LOG_PATH:
@@ -119,6 +122,8 @@ class SetupManager:
 
 
 def calc_minutes(date_str):
+    if isinstance(date_str, (int, float)):
+        return float(max(0.0, date_str))
     s = str(date_str).strip()
     if not s or s.lower() in ["none", "nan", "nat", ""]:
         return 0.0
@@ -206,6 +211,40 @@ def compute_target_lead_minutes(start_date, due_date):
     return max(0.0, calc_minutes(due_date) - calc_minutes(start_date))
 
 
+class _LotReleaseLike:
+    """Duck-typed adapter so `MesLotReleasePlan` rows can be fed to `_source_process` unchanged.
+
+    `_source_process` reads these attributes off of a `LotRelease` ORM object — we replicate
+    only the fields it actually touches so the engine path stays identical between cold-start
+    master releases and scenario release plans.
+    """
+
+    __slots__ = (
+        "plan_id", "product_name", "route_name", "start_date", "due_date",
+        "release_interval", "lots_per_release", "wafers_per_lot",
+        "priority", "lot_type", "is_super_hot_lot",
+    )
+
+    def __init__(self, plan_id, product_name, route_name, start_delay,
+                 lots_per_release, release_interval, wafers_per_lot,
+                 priority, due_date_minutes, lot_type, is_super_hot_lot):
+        self.plan_id = plan_id
+        self.product_name = product_name
+        self.route_name = route_name
+        # `_source_process` calls `calc_minutes(r.start_date)` -> we pre-compute relative delay
+        # and feed it back via a tagged string the parser turns into minutes.
+        # Easier: monkey-patch by passing a numeric and patching `_source_process` to accept it.
+        self.start_date = float(start_delay)
+        # Due-date in relative-minute representation (engine compares against `sim_env.now`).
+        self.due_date = float(due_date_minutes)
+        self.release_interval = float(release_interval or 0.0)
+        self.lots_per_release = int(lots_per_release or 1)
+        self.wafers_per_lot = int(wafers_per_lot or 1)
+        self.priority = int(priority or 0)
+        self.lot_type = lot_type
+        self.is_super_hot_lot = is_super_hot_lot
+
+
 class FabEnv(gym.Env):
     metadata = {"render_modes": ["human"]}
 
@@ -260,6 +299,22 @@ class FabEnv(gym.Env):
         self._kpi_tool_finish_dq = defaultdict(deque)        # tool_id -> deque[t]
         self._kpi_tool_rework_dq = defaultdict(deque)        # tool_id -> deque[t]
         self._kpi_tool_scrap_dq = defaultdict(deque)         # tool_id -> deque[t]
+        self._pm_piece_count = {}                            # tool_id -> processed pieces (counter PM)
+        # ---------- Scenario / FORWARD / WHAT-IF state ----------
+        # `_sim_clock_offset` keeps SimPy 0..horizon while logs/KPIs report absolute (t0 + now).
+        # Cold-start runs leave offset=0 so behavior is unchanged.
+        self._sim_clock_offset = 0.0
+        self._scenario_id = None
+        self._scenario_mode = None             # None | "FORWARD" | "WHATIF"
+        self._scenario_use_master_release = False
+        self._mes_scenario_run_id = None
+        self._mes_scenario_validation_report = {}
+        self._skip_master_lot_release = False  # set true when scenario provides its own releases
+        # WHAT-IF override state (consumed by dispatch helpers)
+        self.dispatch_rule_override = {}       # group_name -> dispatch_rule string
+        self.hold_lots = set()                 # lot_id set (skip dispatch)
+        self.force_next_tool = {}              # lot_id -> {"tool_id": str, "once": bool, "tool_group": str|None}
+        self.skip_release_ids = set()          # MesLotReleasePlan.id values to skip
 
     def _sim_csv_dir(self):
         return (os.environ.get("SIM_CSV_DIR") or "").strip()
@@ -308,9 +363,53 @@ class FabEnv(gym.Env):
         self._kpi_tool_finish_dq = defaultdict(deque)
         self._kpi_tool_rework_dq = defaultdict(deque)
         self._kpi_tool_scrap_dq = defaultdict(deque)
+        self._pm_piece_count = {}
+        # Reset per-episode scenario/what-if state.
+        self._sim_clock_offset = 0.0
+        self._scenario_id = None
+        self._scenario_mode = None
+        self._scenario_use_master_release = False
+        self._mes_scenario_run_id = None
+        self._mes_scenario_validation_report = {}
+        self._skip_master_lot_release = False
+        self.dispatch_rule_override = {}
+        self.hold_lots = set()
+        self.force_next_tool = {}
+        self.skip_release_ids = set()
+
+        # Resolve scenario id from options or env var.
+        opts = options or {}
+        scenario_id = opts.get("scenario_id") or os.environ.get("SIM_SCENARIO_ID") or None
+        scenario_obj = None
+        if scenario_id:
+            scenario_id = str(scenario_id).strip()
+            if scenario_id:
+                db_pre = SessionLocal()
+                try:
+                    scenario_obj = (
+                        db_pre.query(MesScenario)
+                        .filter(MesScenario.scenario_id == scenario_id)
+                        .first()
+                    )
+                    if not scenario_obj:
+                        raise RuntimeError(f"scenario not found: {scenario_id}")
+                    self._scenario_id = scenario_obj.scenario_id
+                    self._scenario_mode = (scenario_obj.mode or "FORWARD").upper()
+                    self._scenario_use_master_release = bool(scenario_obj.use_master_lot_release)
+                    self._sim_clock_offset = float(scenario_obj.t0_sim_minute or 0.0)
+                    self.sim_end_minutes = float(scenario_obj.horizon_minutes or 0.0)
+                    # Master master-release spawning is skipped unless explicitly allowed.
+                    self._skip_master_lot_release = not self._scenario_use_master_release
+                finally:
+                    db_pre.close()
+
         db = SessionLocal()
         try:
-            self._build_simulation(db)
+            master_release_spawned = self._build_simulation(db)
+            if scenario_obj is not None:
+                self._apply_scenario_overrides(db, scenario_obj)
+            # Keep ORM rows usable after session close (PM/BD SimPy processes).
+            db.expunge_all()
         finally:
             db.close()
         self._resume_simulation()
@@ -389,6 +488,10 @@ class FabEnv(gym.Env):
     def _log_process(self, lot_id, product, route_id, step_seq, step_name, tool_group, tool_id, arrive_time, start_time, end_time):
         qt = start_time - arrive_time
         pt = end_time - start_time
+        off = float(self._sim_clock_offset)
+        arrive_time = float(arrive_time) + off
+        start_time = float(start_time) + off
+        end_time = float(end_time) + off
         try:
             db = SessionLocal()
             db.add(SimulationLog(
@@ -437,7 +540,7 @@ class FabEnv(gym.Env):
             )
 
     def _log_lot_event(self, lot_id, product, route_id, step_seq, tool_group, tool_id, event_type, detail_1=None, detail_2=None):
-        ev_time = float(self.sim_env.now)
+        ev_time = float(self._sim_now_abs())
         try:
             db = SessionLocal()
             db.add(LotEventLog(
@@ -525,7 +628,7 @@ class FabEnv(gym.Env):
             self._kpi_record_unit_state(tool_id, state)
         if not is_unit:
             granularity = "aggregate"
-        t = float(self.sim_env.now)
+        t = float(self._sim_now_abs())
 
         if granularity in ("unit", "both") and is_unit:
             self._emit_tool_state_row(
@@ -554,25 +657,88 @@ class FabEnv(gym.Env):
             )
 
     def _sync_cqt_table(self, lot_id, start_step, target_step, deadline_time, started_at, is_active):
+        off = float(self._sim_clock_offset)
         try:
             db = SessionLocal()
             row = db.query(ActiveCqtTimer).filter(ActiveCqtTimer.lot_id == lot_id, ActiveCqtTimer.is_active == True).first()
             if row is None:
                 row = ActiveCqtTimer(
                     lot_id=lot_id, start_step=start_step, target_step=target_step,
-                    deadline_time=deadline_time, started_at=started_at, is_active=is_active
+                    deadline_time=float(deadline_time) + off,
+                    started_at=float(started_at) + off,
+                    is_active=is_active,
                 )
                 db.add(row)
             else:
                 row.start_step = start_step
                 row.target_step = target_step
-                row.deadline_time = deadline_time
-                row.started_at = started_at
+                row.deadline_time = float(deadline_time) + off
+                row.started_at = float(started_at) + off
                 row.is_active = is_active
             db.commit()
             db.close()
         except Exception:
             pass
+
+    def _parse_dispatch_flags(self, toolgroup):
+        tg_name = str(getattr(toolgroup, "toolgroup_name", "") or "")
+        override = self.dispatch_rule_override.get(tg_name)
+        rule = str(override if override is not None else (getattr(toolgroup, "dispatch_rule", None) or "")).lower()
+        return {
+            "setup_avoidance": "setupavoidance" in rule or "setup avoidance" in rule,
+            "superhot_enabled": "superhotlot" in rule or "super hot" in rule,
+        }
+
+    def _cqt_target_step(self, step):
+        if getattr(step, "cqt_target_step", None) is not None:
+            return int(step.cqt_target_step)
+        if getattr(step, "cqt_start_step", None) is not None:
+            return int(step.cqt_start_step)
+        return None
+
+    def _cqt_anchor_step(self, step):
+        if getattr(step, "cqt_anchor_step", None) is not None:
+            return int(step.cqt_anchor_step)
+        if step.cqt_limit and self._cqt_target_step(step) is not None:
+            return int(step.step_seq)
+        return None
+
+    def _start_cqt_timer(self, lot_name, product_name, route_name, step, m_name, tool_id):
+        anchor = self._cqt_anchor_step(step)
+        target = self._cqt_target_step(step)
+        if not step.cqt_limit or anchor is None or target is None:
+            return
+        if int(step.step_seq) != anchor:
+            return
+        deadline = float(self.sim_env.now) + self._unit_to_minutes(step.cqt_limit, step.cqt_unit)
+        self.active_cqt[lot_name] = {
+            "start_step": anchor,
+            "target_step": target,
+            "deadline_time": deadline,
+            "started_at": float(self.sim_env.now),
+        }
+        self._sync_cqt_table(lot_name, anchor, target, deadline, float(self.sim_env.now), True)
+        self._log_lot_event(
+            lot_name, product_name, route_name, anchor, m_name, tool_id,
+            "CQT_START", detail_1=str(deadline),
+        )
+
+    def _end_cqt_timer(self, lot_name, product_name, route_name, step_seq, m_name, tool_id):
+        if lot_name not in self.active_cqt:
+            return
+        timer = self.active_cqt[lot_name]
+        self._log_lot_event(
+            lot_name, product_name, route_name, int(step_seq), m_name, tool_id, "CQT_END",
+        )
+        self._sync_cqt_table(
+            lot_name, timer["start_step"], timer["target_step"],
+            timer["deadline_time"], timer["started_at"], False,
+        )
+        del self.active_cqt[lot_name]
+
+    def _record_pm_pieces(self, tool_id, pieces):
+        if tool_id and pieces > 0:
+            self._pm_piece_count[tool_id] = self._pm_piece_count.get(tool_id, 0) + int(pieces)
 
     def _record_wip_snapshot(self):
         try:
@@ -584,7 +750,7 @@ class FabEnv(gym.Env):
                 if waiting > 0:
                     avg_q = sum(max(0.0, self.sim_env.now - getattr(e, "enqueue_time", self.sim_env.now)) for e in tool_data["queue"]) / waiting
                 db.add(RealtimeWipSummary(
-                    snapshot_time=float(self.sim_env.now), tool_group=tool_data["group"], tool_id=tool_id,
+                    snapshot_time=float(self._sim_now_abs()), tool_group=tool_data["group"], tool_id=tool_id,
                     waiting_lots=waiting, processing_lots=processing, avg_queue_time=float(avg_q)
                 ))
             db.commit()
@@ -645,6 +811,8 @@ class FabEnv(gym.Env):
                 tool_ids.append(tool_id)
                 self.tools[tool_id] = {
                     "group": group_name,
+                    "tool_index": idx - 1,
+                    "tool_count": tool_count,
                     "resource": simpy.PriorityResource(self.sim_env, capacity=1),
                     "queue": [],
                     "current_setup": None,
@@ -653,6 +821,7 @@ class FabEnv(gym.Env):
                     "toolgroup": tg,
                     "op_state": "IDLE",
                 }
+                self._pm_piece_count[tool_id] = 0
             self._log_tool_state(group_name, None, "IDLE", reason="INIT")
             for bd in self.breakdowns:
                 if self._matches_breakdown_scope(tg, bd):
@@ -693,11 +862,461 @@ class FabEnv(gym.Env):
                 self._tool_process[tid] = proc_name
                 self._process_tools[proc_name].append(tid)
 
-        for r in releases:
-            if r.wafers_per_lot and r.wafers_per_lot > 0:
-                self.sim_env.process(self._source_process(r))
+        master_spawned = 0
+        if not self._skip_master_lot_release:
+            for r in releases:
+                if r.wafers_per_lot and r.wafers_per_lot > 0:
+                    self.sim_env.process(self._source_process(r))
+                    master_spawned += 1
         self.sim_env.process(self._snapshot_loop())
         self.sim_env.process(self._kpi_snapshot_loop())
+        return master_spawned
+
+    # =========================================================
+    # Scenario / FORWARD / WHAT-IF helpers
+    # =========================================================
+    def _sim_now_abs(self) -> float:
+        """Absolute fab-sim minute = SimPy relative time + scenario t0 offset.
+
+        Cold start: offset==0 so returns the same as `sim_env.now`.
+        Scenario  : adds `t0_sim_minute` so logs/KPIs align with MES wall clock.
+        """
+        try:
+            return float(self.sim_env.now) + float(self._sim_clock_offset)
+        except Exception:
+            return float(self._sim_clock_offset)
+
+    def _abs_to_rel(self, t_abs) -> float:
+        """DB absolute sim minute -> SimPy relative (0..horizon). Clamped at 0."""
+        if t_abs is None:
+            return 0.0
+        return max(0.0, float(t_abs) - float(self._sim_clock_offset))
+
+    def _rel_to_abs(self, t_rel) -> float:
+        return float(t_rel) + float(self._sim_clock_offset)
+
+    def _timeout_until_abs(self, t_abs):
+        """SimPy timeout from current relative time until the given absolute minute (clamped)."""
+        delay = max(0.0, float(t_abs) - self._sim_now_abs())
+        return self.sim_env.timeout(delay)
+
+    def _ensure_simulation_run_row(self):
+        """Insert a row in `simulation_run` for the current `_csv_run_id` if absent."""
+        try:
+            db = SessionLocal()
+            row = db.query(SimulationRun).filter(SimulationRun.run_id == self._csv_run_id).first()
+            if row is None:
+                db.add(SimulationRun(
+                    run_id=self._csv_run_id,
+                    source_path=f"scenario:{self._scenario_id}" if self._scenario_id else None,
+                    sim_end_minutes=float(self.sim_end_minutes),
+                    note=f"FabEnv {'scenario' if self._scenario_id else 'cold-start'} run",
+                ))
+                db.commit()
+            db.close()
+        except Exception:
+            pass
+
+    def _apply_scenario_overrides(self, db, scenario):
+        """Inject T0 snapshot, scheduled releases, and (optionally) WHAT-IF actions into SimPy."""
+        self._ensure_simulation_run_row()
+        # Mark scenario RUNNING + create mes_scenario_run record (session-attached row).
+        try:
+            sc_row = db.query(MesScenario).filter(
+                MesScenario.scenario_id == scenario.scenario_id
+            ).first()
+            if sc_row is not None:
+                sc_row.status = "RUNNING"
+            run = MesScenarioRun(
+                scenario_id=scenario.scenario_id,
+                simulation_run_id=self._csv_run_id,
+                validation_report=None,
+            )
+            db.add(run)
+            db.commit()
+            self._mes_scenario_run_id = int(run.id)
+        except Exception:
+            db.rollback()
+
+        # 1) T0 snapshots — queues before WIP so pre-seeded events exist when lot processes start
+        self._inject_t0_tools(db, scenario)
+        self._inject_t0_queues(db, scenario)
+        self._inject_t0_wip(db, scenario)
+        self._inject_t0_cqt(db, scenario)
+
+        # 2) WHAT-IF actions: apply BEFORE release spawning so immediate
+        #    SKIP_RELEASE / FORCE_TOOL overrides are visible.
+        if str(scenario.mode or "").upper() == "WHATIF":
+            self._load_whatif_actions(db, scenario)
+
+        # 3) Scheduled releases (FORWARD + WHATIF; master release optional)
+        self._spawn_lot_release_plan(db, scenario)
+
+    # ---- T0 snapshot injectors ------------------------------------------------
+
+    def _inject_t0_tools(self, db, scenario):
+        rows = db.query(MesToolSnapshot).filter(
+            MesToolSnapshot.scenario_id == scenario.scenario_id
+        ).all()
+        for r in rows:
+            tool = self.tools.get(r.tool_id)
+            if tool is None:
+                self._mes_scenario_validation_report.setdefault("missing_tools", []).append(r.tool_id)
+                continue
+            if r.current_setup:
+                tool["current_setup"] = r.current_setup
+                tool["last_setup"] = r.current_setup
+            op = str(r.op_state or "IDLE").upper()
+            tool["op_state"] = op
+            self._kpi_record_unit_state(r.tool_id, op)
+            if op in ("DOWN_PM", "DOWN_BM"):
+                # Hold the resource so dispatch waits until snapshot down-state is released.
+                self.sim_env.process(self._inject_down_hold(r.tool_id, op))
+
+    def _inject_down_hold(self, tool_id, op_state):
+        """Best-effort: occupy the tool with a priority=0 request to mimic DOWN at T0.
+
+        The hold uses the master PM/BD durations the engine already knows.  When neither
+        master record matches, the down state is just logged once and released so dispatch
+        can resume; this keeps the simulation moving when MES snapshot disagrees with master.
+        """
+        tool = self.tools.get(tool_id)
+        if not tool:
+            return
+        m_name = tool["group"]
+        # Approximate down duration: average MTTR / PM duration from master tables.
+        duration = 0.0
+        try:
+            if op_state == "DOWN_PM":
+                for pm in self.pms:
+                    if pm.target_tool_group and str(pm.target_tool_group) in m_name:
+                        duration = max(duration, self._unit_to_minutes(pm.duration_mean, pm.duration_unit))
+            elif op_state == "DOWN_BM":
+                for bd in self.breakdowns:
+                    if self._matches_breakdown_scope(tool["toolgroup"], bd):
+                        duration = max(duration, float(bd.mttr_mean or 0.0))
+        except Exception:
+            duration = 0.0
+        # Fall back to a short cool-down so the snapshot state at least appears in logs.
+        if duration <= 0.0:
+            duration = 30.0
+        res = tool["resource"]
+        with res.request(priority=0) as req:
+            yield req
+            self._log_tool_state(m_name, tool_id, op_state, reason="T0_SNAPSHOT")
+            yield self.sim_env.timeout(duration)
+            self._log_tool_state(m_name, tool_id, "IDLE", reason="T0_DOWN_RELEASED")
+
+    def _inject_t0_wip(self, db, scenario):
+        rows = db.query(MesWipSnapshot).filter(
+            MesWipSnapshot.scenario_id == scenario.scenario_id
+        ).all()
+        for w in rows:
+            steps = self.routes.get(w.route_id)
+            if not steps:
+                self._mes_scenario_validation_report.setdefault("missing_routes", []).append(w.route_id)
+                continue
+            # Locate the step index for current_step_seq.
+            idx = next(
+                (i for i, s in enumerate(steps) if int(s.step_seq) == int(w.current_step_seq)),
+                None,
+            )
+            if idx is None:
+                self._mes_scenario_validation_report.setdefault(
+                    "missing_steps", []
+                ).append({"route": w.route_id, "step_seq": int(w.current_step_seq)})
+                continue
+            lot_name = str(w.lot_id)
+            self.issued_lot_names.add(lot_name)
+            wafers = int(w.wafers_per_lot or 1)
+            due_rel = self._abs_to_rel(w.due_date_sim) if w.due_date_sim is not None else self._abs_to_rel(0.0)
+            priority = int(w.priority or 0)
+            is_super = bool(w.is_super_hot)
+            product = str(w.product or w.route_id)
+            self.active_lots_data[lot_name] = {
+                "lot_name": lot_name,
+                "product": product,
+                "rem_steps": int(w.rem_steps if w.rem_steps is not None else len(steps) - idx),
+                "total_steps": len(steps),
+                "due_date": float(due_rel),
+                "start_time": float(self.sim_env.now),
+                "status": str(w.status or "QUEUING"),
+                "tool_id": w.tool_id,
+            }
+            # Track release for KPI / RTF
+            self._kpi_lot_rtf[lot_name] = {
+                "release_time": float(self.sim_env.now),
+                "due_date": float(due_rel),
+                "finish_time": None,
+            }
+            self._kpi_release_count += 1
+            status = str(w.status or "").upper()
+            if status == "PROCESSING":
+                remaining = w.processing_remaining_min
+                if remaining is None or remaining <= 0:
+                    # Locked decision §2: treat as empty tool, FINISH immediately.
+                    self._mes_scenario_validation_report.setdefault(
+                        "warnings", []
+                    ).append(f"WIP {lot_name} PROCESSING but processing_remaining_min missing; finishing at t0")
+                    remaining = 0.0
+                self.sim_env.process(self._resume_processing_wip(
+                    lot_name, product, w.route_id, idx, float(remaining),
+                    priority, wafers, is_super, due_rel, w.tool_id,
+                ))
+            else:
+                # QUEUING / WAIT_TRANSPORT / WAIT_BATCH / HOLD → continue with normal lot loop from idx.
+                self.sim_env.process(self._lot_process_from(
+                    lot_name, product, w.route_id, float(due_rel), priority, wafers, is_super, idx,
+                ))
+                if status == "HOLD":
+                    self.hold_lots.add(lot_name)
+
+    def _resume_processing_wip(self, lot_name, product, route_id, idx, remaining_min,
+                               priority, wafers, is_super, due_rel, tool_id):
+        """Finish the currently running step (if `tool_id` is known), then continue from idx+1."""
+        steps = self.routes.get(route_id) or []
+        if not steps or idx >= len(steps):
+            return
+        step = steps[idx]
+        m_name = step.target_tool_group
+        if remaining_min > 0 and tool_id and tool_id in self.tools:
+            tool = self.tools[tool_id]
+            self._log_lot_event(
+                lot_name, product, route_id, int(step.step_seq), m_name, tool_id,
+                "T0_RESUME_PROCESSING", detail_1=str(remaining_min),
+            )
+            self._log_tool_state(m_name, tool_id, "RUN", setup_name=tool["current_setup"], lot_id=lot_name)
+            with tool["resource"].request(priority=10) as req:
+                yield req
+                start_time = self.sim_env.now
+                yield self.sim_env.timeout(float(remaining_min))
+                end_time = self.sim_env.now
+                self._log_process(
+                    lot_name, product, route_id, int(step.step_seq), str(step.step_name or ""),
+                    m_name, tool_id, float(start_time), float(start_time), float(end_time),
+                )
+                self._log_lot_event(lot_name, product, route_id, int(step.step_seq), m_name, tool_id, "FINISH")
+                self._log_tool_state(m_name, tool_id, "IDLE", setup_name=tool["current_setup"], lot_id=lot_name)
+                self.lot_ltl_lock[lot_name][int(step.step_seq)] = tool_id
+        # Continue from next step
+        yield self.sim_env.process(self._lot_process_from(
+            lot_name, product, route_id, float(due_rel), priority, wafers, is_super, idx + 1,
+        ))
+
+    def _lot_process_from(self, lot_name, product, route_id, due_date, priority, wafers, is_super, start_idx):
+        """Resume a T0 WIP lot from the given step index, skipping ARRIVAL logging."""
+        yield from self._lot_process(
+            lot_name, product, route_id, due_date, priority, wafers, is_super,
+            start_idx=int(start_idx), suppress_init_logs=True,
+        )
+
+    def _inject_t0_queues(self, db, scenario):
+        rows = (
+            db.query(MesToolQueueSnapshot)
+            .filter(MesToolQueueSnapshot.scenario_id == scenario.scenario_id)
+            .order_by(MesToolQueueSnapshot.tool_id, MesToolQueueSnapshot.position)
+            .all()
+        )
+        for q in rows:
+            tool = self.tools.get(q.tool_id)
+            if tool is None:
+                continue
+            ev = self.sim_env.event()
+            ev.enqueue_time = float(self.sim_env.now)
+            ev.payload = {
+                "name": q.lot_id,
+                "product": (self.active_lots_data.get(q.lot_id, {}) or {}).get("product", q.lot_id),
+                "step_seq": int(q.step_seq or 0),
+                "rem_steps": (self.active_lots_data.get(q.lot_id, {}) or {}).get("rem_steps", 1),
+                "due_date": float(self._abs_to_rel(q.due_date_sim) if q.due_date_sim is not None else 0.0),
+                "req_setup": None,
+                "q_danger": 0.0,
+                "priority": int(q.priority or 0),
+                "is_batch": False,
+                "super_hot": False,
+                "tool_id": q.tool_id,
+                "wafers": 1,
+                "batch_leader": False,
+                "batch_id": None,
+                "batch_total_wafers": None,
+                "batch_lot_count": None,
+                "_t0_seeded": True,
+            }
+            tool["queue"].append(ev)
+
+    def _inject_t0_cqt(self, db, scenario):
+        rows = db.query(MesCqtSnapshot).filter(
+            MesCqtSnapshot.scenario_id == scenario.scenario_id
+        ).all()
+        for r in rows:
+            self.active_cqt[r.lot_id] = {
+                "start_step": int(r.anchor_step) if r.anchor_step is not None else int(r.target_step),
+                "target_step": int(r.target_step),
+                "deadline_time": float(self._abs_to_rel(r.deadline_time)),
+                "started_at": float(self._abs_to_rel(r.started_at)),
+            }
+
+    # ---- Release plan adapter -------------------------------------------------
+
+    def _spawn_lot_release_plan(self, db, scenario):
+        """Spawn `_source_process` for each MesLotReleasePlan row inside the horizon."""
+        rows = db.query(MesLotReleasePlan).filter(
+            MesLotReleasePlan.scenario_id == scenario.scenario_id
+        ).all()
+        spawned = 0
+        for r in rows:
+            if r.id in self.skip_release_ids:
+                continue
+            adapter = _LotReleaseLike(
+                plan_id=int(r.id),
+                product_name=r.product_name,
+                route_name=r.route_name,
+                start_delay=self._abs_to_rel(r.release_time),
+                lots_per_release=int(r.lots_count or 1),
+                release_interval=float(r.release_interval or 0.0),
+                wafers_per_lot=int(r.wafers_per_lot or 1),
+                priority=int(r.priority or 0),
+                due_date_minutes=(
+                    self._abs_to_rel(r.due_date_sim)
+                    if r.due_date_sim is not None
+                    else self._abs_to_rel(r.release_time)
+                ),
+                lot_type=r.lot_type,
+                is_super_hot_lot="yes" if r.is_super_hot else "no",
+            )
+            self.sim_env.process(self._source_process(adapter))
+            spawned += 1
+        return spawned
+
+    # ---- WHAT-IF actions ------------------------------------------------------
+
+    def _load_whatif_actions(self, db, scenario):
+        rows = (
+            db.query(MesWhatifAction)
+            .filter(MesWhatifAction.scenario_id == scenario.scenario_id)
+            .order_by(MesWhatifAction.effective_time, MesWhatifAction.seq)
+            .all()
+        )
+        now_abs = self._sim_now_abs()
+        immediate, deferred = [], []
+        for a in rows:
+            if float(a.effective_time) <= now_abs + 1e-6:
+                immediate.append(a)
+            else:
+                deferred.append(a)
+        for a in immediate:
+            self._apply_whatif_action(a)
+        if deferred:
+            self.sim_env.process(self._whatif_action_loop(deferred))
+
+    def _whatif_action_loop(self, actions):
+        for a in actions:
+            yield self._timeout_until_abs(float(a.effective_time))
+            try:
+                self._apply_whatif_action(a)
+            except Exception as exc:
+                self._mes_scenario_validation_report.setdefault("action_errors", []).append({
+                    "id": int(a.id), "kind": a.action_kind, "err": str(exc),
+                })
+
+    def _apply_whatif_action(self, a):
+        kind = str(a.action_kind or "").upper()
+        payload = a.payload_json or {}
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except Exception:
+                payload = {}
+        lot_id = a.lot_id
+        if kind == "LOT_PRIORITY":
+            pri = int(payload.get("priority", 0))
+            if lot_id and lot_id in self.active_lots_data:
+                self.active_lots_data[lot_id]["priority"] = pri
+            for tool in self.tools.values():
+                for ev in tool["queue"]:
+                    if getattr(ev, "payload", {}).get("name") == lot_id:
+                        ev.payload["priority"] = pri
+        elif kind == "LOT_HOLD":
+            if lot_id:
+                self.hold_lots.add(lot_id)
+        elif kind == "LOT_RELEASE":
+            if lot_id and lot_id in self.hold_lots:
+                self.hold_lots.discard(lot_id)
+        elif kind == "DISPATCH_RULE_OVERRIDE":
+            tg = payload.get("tool_group") or a.tool_group
+            rule = payload.get("dispatch_rule")
+            if tg and rule:
+                self.dispatch_rule_override[str(tg)] = str(rule)
+        elif kind == "FORCE_TOOL":
+            tool_id = payload.get("tool_id") or a.tool_id
+            once = bool(payload.get("once", False))
+            tg = payload.get("tool_group") or a.tool_group
+            if lot_id and tool_id:
+                self.force_next_tool[lot_id] = {
+                    "tool_id": str(tool_id),
+                    "once": once,
+                    "tool_group": (str(tg) if tg else None),
+                }
+        elif kind == "SKIP_RELEASE":
+            rel_id = payload.get("mes_lot_release_plan_id")
+            if rel_id is not None:
+                self.skip_release_ids.add(int(rel_id))
+        elif kind == "ADD_RELEASE":
+            adapter = _LotReleaseLike(
+                plan_id=None,
+                product_name=str(payload.get("product_name") or ""),
+                route_name=str(payload.get("route_name") or ""),
+                start_delay=self._abs_to_rel(float(payload.get("release_time") or self._sim_now_abs())),
+                lots_per_release=int(payload.get("lots_count") or 1),
+                release_interval=float(payload.get("release_interval") or 0.0),
+                wafers_per_lot=int(payload.get("wafers_per_lot") or 1),
+                priority=int(payload.get("priority") or 0),
+                due_date_minutes=self._abs_to_rel(
+                    float(payload.get("due_date_sim") or (payload.get("release_time") or self._sim_now_abs()))
+                ),
+                lot_type=payload.get("lot_type"),
+                is_super_hot_lot="yes" if payload.get("is_super_hot") else "no",
+            )
+            self.sim_env.process(self._source_process(adapter))
+        else:
+            self._mes_scenario_validation_report.setdefault("unknown_actions", []).append({
+                "kind": kind, "id": int(a.id),
+            })
+
+    def finalize_mes_scenario_run(self):
+        """Mark the scenario DONE and update mes_scenario_run.finished_at."""
+        if not self._scenario_id:
+            return
+        try:
+            db = SessionLocal()
+            sc = db.query(MesScenario).filter(MesScenario.scenario_id == self._scenario_id).first()
+            if sc is not None:
+                sc.status = "DONE"
+            if self._mes_scenario_run_id is not None:
+                run = db.query(MesScenarioRun).filter(MesScenarioRun.id == self._mes_scenario_run_id).first()
+                if run is not None:
+                    run.finished_at = datetime.utcnow()
+                    run.validation_report = self._mes_scenario_validation_report or None
+            db.commit()
+            db.close()
+        except Exception:
+            pass
+
+    def _find_t0_preseeded_event(self, tool_id, lot_name, step_seq):
+        """Return a T0 queue snapshot event if already injected (avoids duplicate queue rows)."""
+        tool = self.tools.get(tool_id)
+        if not tool:
+            return None
+        step_seq = int(step_seq)
+        for evt in tool.get("queue", []):
+            pld = getattr(evt, "payload", None) or {}
+            if (
+                pld.get("_t0_seeded")
+                and pld.get("name") == lot_name
+                and int(pld.get("step_seq", -1)) == step_seq
+            ):
+                return evt
+        return None
 
     def _matches_breakdown_scope(self, toolgroup, bd):
         scope = str(bd.scope or "").lower()
@@ -769,13 +1388,17 @@ class FabEnv(gym.Env):
     def _source_process(self, r):
         start_delay = calc_minutes(r.start_date)
         target_lead_min = compute_target_lead_minutes(r.start_date, r.due_date)
+        base_due_min = calc_minutes(r.due_date)
+        release_interval = float(r.release_interval or 0.0)
+        release_index = 0
         # region agent log
         _agent_log("pre-fix", "H2", "fab_env.py:_source_process", "release parsed", {
             "product": r.product_name,
             "route": r.route_name,
             "start_delay": float(start_delay),
             "target_lead_min": float(target_lead_min),
-            "release_interval": float(r.release_interval or 0.0),
+            "base_due_min": float(base_due_min),
+            "release_interval": float(release_interval),
             "lots_per_release": int(r.lots_per_release or 1),
         })
         # endregion
@@ -783,51 +1406,39 @@ class FabEnv(gym.Env):
             yield self.sim_env.timeout(start_delay)
         release_count = max(1, int(r.lots_per_release or 1))
         wafers = max(1, int(r.wafers_per_lot or 1))
-        if not r.release_interval or r.release_interval <= 0:
-            for i in range(release_count):
-                preferred = r.lot_type if r.lot_type else None
-                lot_name = self._next_lot_name(r.product_name, preferred_name=preferred)
-                lot_due_date = float(self.sim_env.now) + float(target_lead_min)
-                # region agent log
-                _agent_log("pre-fix", "H2", "fab_env.py:_source_process", "single lot release due-date computed", {
-                    "lot_name": lot_name,
-                    "release_time": float(self.sim_env.now),
-                    "target_lead_min": float(target_lead_min),
-                    "computed_due_date": float(lot_due_date),
-                })
-                # endregion
-                self._kpi_lot_rtf[lot_name] = {
-                    "release_time": float(self.sim_env.now),
-                    "due_date": float(lot_due_date),
-                    "finish_time": None,
-                }
-                self.sim_env.process(self._lot_process(
-                    lot_name, r.product_name, r.route_name, lot_due_date, int(r.priority or 0), wafers, str(r.is_super_hot_lot or "").lower() == "yes"
-                ))
-                self._kpi_release_count += 1
+        is_super = str(r.is_super_hot_lot or "").lower() == "yes"
+
+        plan_id = getattr(r, "plan_id", None)
+
+        def _release_one_lot(lot_due_date):
+            nonlocal release_index
+            if plan_id is not None and plan_id in self.skip_release_ids:
+                release_index += 1
+                return
+            preferred = r.lot_type if r.lot_type else None
+            lot_name = self._next_lot_name(r.product_name, preferred_name=preferred)
+            self._kpi_lot_rtf[lot_name] = {
+                "release_time": float(self.sim_env.now),
+                "due_date": float(lot_due_date),
+                "finish_time": None,
+            }
+            self.sim_env.process(self._lot_process(
+                lot_name, r.product_name, r.route_name, float(lot_due_date),
+                int(r.priority or 0), wafers, is_super,
+            ))
+            self._kpi_release_count += 1
+            release_index += 1
+
+        if not release_interval or release_interval <= 0:
+            for _i in range(release_count):
+                _release_one_lot(float(self.sim_env.now) + float(target_lead_min))
         else:
             while True:
-                for i in range(release_count):
-                    lot_name = self._next_lot_name(r.product_name)
-                    lot_due_date = float(self.sim_env.now) + float(target_lead_min)
-                    # region agent log
-                    _agent_log("pre-fix", "H2", "fab_env.py:_source_process", "repeat lot release due-date computed", {
-                        "lot_name": lot_name,
-                        "release_time": float(self.sim_env.now),
-                        "target_lead_min": float(target_lead_min),
-                        "computed_due_date": float(lot_due_date),
-                    })
-                    # endregion
-                    self._kpi_lot_rtf[lot_name] = {
-                        "release_time": float(self.sim_env.now),
-                        "due_date": float(lot_due_date),
-                        "finish_time": None,
-                    }
-                    self.sim_env.process(self._lot_process(
-                        lot_name, r.product_name, r.route_name, lot_due_date, int(r.priority or 0), wafers, str(r.is_super_hot_lot or "").lower() == "yes"
-                    ))
-                    self._kpi_release_count += 1
-                yield self.sim_env.timeout(float(r.release_interval))
+                for _i in range(release_count):
+                    # Sliding absolute due: each release pushes due by one interval (SMT WSPW stress pattern).
+                    lot_due_date = base_due_min + (release_index * release_interval)
+                    _release_one_lot(lot_due_date)
+                yield self.sim_env.timeout(release_interval)
 
     def _sample_transport(self):
         if not self.transport_rule:
@@ -883,7 +1494,9 @@ class FabEnv(gym.Env):
             if 0 <= i < len(queue):
                 evt = queue[i]
                 p = evt.payload if hasattr(evt, "payload") else {}
-                if self._allowed_by_setup_avoidance(t_data, p.get("req_setup")):
+                if p.get("name") not in self.hold_lots and self._allowed_by_setup_avoidance(
+                    t_data, p.get("req_setup")
+                ):
                     return i
         return self._select_dispatch_candidate(tool_id, queue)
 
@@ -920,9 +1533,26 @@ class FabEnv(gym.Env):
     def _select_dispatch_candidate(self, m_name, queue):
         t_data = self.tools[m_name]
         tg = t_data["toolgroup"]
+        flags = self._parse_dispatch_flags(tg)
+        # WHAT-IF: a FORCE_TOOL override targeted at this physical tool jumps the queue.
+        forced_idx = None
+        for idx, evt in enumerate(queue):
+            p = getattr(evt, "payload", {}) or {}
+            forced = self.force_next_tool.get(p.get("name"))
+            if forced and forced.get("tool_id") == m_name:
+                if not self._allowed_by_setup_avoidance(t_data, p.get("req_setup")):
+                    continue
+                forced_idx = idx
+                if forced.get("once"):
+                    self.force_next_tool.pop(p.get("name"), None)
+                break
+        if forced_idx is not None:
+            return forced_idx
         ranked = []
         for idx, evt in enumerate(queue):
             p = evt.payload
+            if p.get("name") in self.hold_lots:
+                continue
             if not self._allowed_by_setup_avoidance(t_data, p.get("req_setup")):
                 continue
             super_hot_key = 0 if p.get("super_hot", False) else 1
@@ -931,6 +1561,11 @@ class FabEnv(gym.Env):
             ranked.append((super_hot_key, -int(p.get("priority", 0)), setup_time, cr, idx))
         if not ranked:
             return 0
+        # P4: superhot lots first when group rule or payload says superhot (no RUN preemption).
+        if flags["superhot_enabled"] or any(queue[i].payload.get("super_hot") for i in range(len(queue))):
+            super_only = [item for item in ranked if item[0] == 0]
+            if super_only:
+                ranked = super_only
         # Hybrid default: superhot -> highest priority -> least setup -> critical ratio
         ranked.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
         # ranking override by toolgroup columns
@@ -1012,30 +1647,52 @@ class FabEnv(gym.Env):
                     n += 1
         return n
 
+    def _tool_wakeup_sort_tuple(self, tool_id, step, product_name):
+        t_data = self.tools[tool_id]
+        tg = t_data["toolgroup"]
+        wakeup = str(getattr(tg, "tool_wakeup_ranking", None) or "").lower()
+        keys = []
+        if "least setuptime" in wakeup or "least setup" in wakeup:
+            keys.append(self.setup_mgr.get_setup_time(t_data["current_setup"], step.setup_id))
+        if "shortest queue" in wakeup or "least queue" in wakeup:
+            keys.append(len(t_data["queue"]))
+        if "idle first" in wakeup:
+            keys.append(0 if t_data["resource"].count == 0 else 1)
+        other_prod = (
+            self._queue_other_product_count(tool_id, product_name)
+            + self._batch_queues_other_product_count(tool_id, product_name)
+        )
+        queue_len = len(t_data["queue"])
+        busy = t_data["resource"].count
+        setup_time = self.setup_mgr.get_setup_time(t_data["current_setup"], step.setup_id)
+        return tuple(keys + [other_prod, busy, queue_len, setup_time, tool_id])
+
     def _choose_tool_for_lot(self, lot_name, step, group_name, product_name):
         candidate_ids = self._resolve_tool_candidates(lot_name, step, group_name)
         if not candidate_ids:
             return None
+        # WHAT-IF FORCE_TOOL override: pin the lot to a specific tool unit if in scope.
+        forced = self.force_next_tool.get(lot_name)
+        if forced:
+            t_id = forced.get("tool_id")
+            t_grp = forced.get("tool_group")
+            if t_id and t_id in candidate_ids and (not t_grp or str(t_grp) == str(group_name)):
+                if forced.get("once"):
+                    self.force_next_tool.pop(lot_name, None)
+                return t_id
         ranked = []
         for tool_id in candidate_ids:
             t_data = self.tools[tool_id]
             if not self._allowed_by_setup_avoidance(t_data, step.setup_id):
                 continue
-            other_prod = (
-                self._queue_other_product_count(tool_id, product_name)
-                + self._batch_queues_other_product_count(tool_id, product_name)
-            )
-            queue_len = len(t_data["queue"])
-            busy = t_data["resource"].count
-            setup_time = self.setup_mgr.get_setup_time(t_data["current_setup"], step.setup_id)
-            # Prefer: no other-product queue, then less busy / shorter queue / less setup / stable tool_id
-            ranked.append((other_prod, busy, queue_len, setup_time, tool_id))
+            ranked.append(self._tool_wakeup_sort_tuple(tool_id, step, product_name))
         if not ranked:
             return candidate_ids[0]
-        ranked.sort(key=lambda x: (x[0], x[1], x[2], x[3], x[4]))
+        ranked.sort()
         return ranked[0][-1]
 
-    def _lot_process(self, lot_name, product_name, route_name, due_date, priority, wafers_per_lot, is_super_hot):
+    def _lot_process(self, lot_name, product_name, route_name, due_date, priority,
+                     wafers_per_lot, is_super_hot, start_idx=0, suppress_init_logs=False):
         steps = self.routes.get(route_name)
         if not steps:
             # region agent log
@@ -1059,19 +1716,21 @@ class FabEnv(gym.Env):
         sim_now = float(self.sim_env.now)
         due_f = float(due_date)
         remaining_to_due = max(0.0, due_f - sim_now)
-        self._log_lot_event(
-            lot_name, product_name, route_name, None, None, None, "ARRIVAL",
-            detail_1=str(sim_now),
-            detail_2=json.dumps(
-                {
-                    "sim_now_min": sim_now,
-                    "due_date_sim_min": due_f,
-                    "remaining_to_due_min": remaining_to_due,
-                },
-                ensure_ascii=True,
-            ),
-        )
-        i = 0
+        off = float(self._sim_clock_offset)
+        if not suppress_init_logs:
+            self._log_lot_event(
+                lot_name, product_name, route_name, None, None, None, "ARRIVAL",
+                detail_1=str(sim_now + off),
+                detail_2=json.dumps(
+                    {
+                        "sim_now_min": sim_now + off,
+                        "due_date_sim_min": due_f + off,
+                        "remaining_to_due_min": remaining_to_due,
+                    },
+                    ensure_ascii=True,
+                ),
+            )
+        i = int(start_idx)
         while i < len(steps):
             step = steps[i]
             m_name = step.target_tool_group
@@ -1095,38 +1754,51 @@ class FabEnv(gym.Env):
                 yield self.sim_env.timeout(1.0)
                 continue
             self.active_lots_data[lot_name]["tool_id"] = selected_tool_id
-            if int(step.step_seq) == int(step.cqt_start_step or -1) and step.cqt_limit:
-                deadline = self.sim_env.now + self._unit_to_minutes(step.cqt_limit, step.cqt_unit)
-                self.active_cqt[lot_name] = {
-                    "start_step": int(step.step_seq),
-                    "target_step": int(step.cqt_start_step),
-                    "deadline_time": float(deadline),
-                    "started_at": float(self.sim_env.now),
-                }
-                self._sync_cqt_table(lot_name, int(step.step_seq), int(step.cqt_start_step), float(deadline), float(self.sim_env.now), True)
-                self._log_lot_event(lot_name, product_name, route_name, int(step.step_seq), m_name, selected_tool_id, "CQT_START", detail_1=str(deadline))
+            if lot_name in self.active_cqt and int(step.step_seq) == int(self.active_cqt[lot_name]["target_step"]):
+                self._end_cqt_timer(
+                    lot_name, product_name, route_name, int(step.step_seq), m_name, selected_tool_id,
+                )
 
             is_batch = str(step.proc_unit or "").lower() == "batch"
-            permission_event = self.sim_env.event()
-            permission_event.enqueue_time = self.sim_env.now
-            permission_event.payload = {
-                "name": lot_name,
-                "product": product_name,
-                "step_seq": int(step.step_seq),
-                "rem_steps": len(steps) - i,
-                "due_date": due_date,
-                "req_setup": step.setup_id,
-                "q_danger": max(0.0, self.sim_env.now - (self.active_cqt.get(lot_name, {}).get("deadline_time", self.sim_env.now + 1e9))),
-                "priority": priority,
-                "is_batch": is_batch,
-                "super_hot": is_super_hot,
-                "tool_id": selected_tool_id,
-                "wafers": int(wafers_per_lot),
-                "batch_leader": False,
-                "batch_id": None,
-                "batch_total_wafers": None,
-                "batch_lot_count": None,
-            }
+            permission_event = self._find_t0_preseeded_event(
+                selected_tool_id, lot_name, int(step.step_seq),
+            )
+            reused_t0_queue = permission_event is not None
+            if permission_event is None:
+                permission_event = self.sim_env.event()
+                permission_event.enqueue_time = self.sim_env.now
+                permission_event.payload = {
+                    "name": lot_name,
+                    "product": product_name,
+                    "step_seq": int(step.step_seq),
+                    "rem_steps": len(steps) - i,
+                    "due_date": due_date,
+                    "req_setup": step.setup_id,
+                    "q_danger": max(0.0, self.sim_env.now - (self.active_cqt.get(lot_name, {}).get("deadline_time", self.sim_env.now + 1e9))),
+                    "priority": priority,
+                    "is_batch": is_batch,
+                    "super_hot": is_super_hot,
+                    "tool_id": selected_tool_id,
+                    "wafers": int(wafers_per_lot),
+                    "batch_leader": False,
+                    "batch_id": None,
+                    "batch_total_wafers": None,
+                    "batch_lot_count": None,
+                }
+            else:
+                # Refresh payload for dispatch while keeping the pre-seeded queue slot.
+                permission_event.payload.update({
+                    "product": product_name,
+                    "rem_steps": len(steps) - i,
+                    "due_date": due_date,
+                    "req_setup": step.setup_id,
+                    "q_danger": max(0.0, self.sim_env.now - (self.active_cqt.get(lot_name, {}).get("deadline_time", self.sim_env.now + 1e9))),
+                    "priority": priority,
+                    "is_batch": is_batch,
+                    "super_hot": is_super_hot,
+                    "tool_id": selected_tool_id,
+                    "wafers": int(wafers_per_lot),
+                })
             run_now = False
             if is_batch:
                 batch_id = (step.route_id, step.step_seq, selected_tool_id)
@@ -1167,7 +1839,8 @@ class FabEnv(gym.Env):
                         break
                     yield self.sim_env.timeout(1.0)
             else:
-                self.tools[selected_tool_id]["queue"].append(permission_event)
+                if not reused_t0_queue:
+                    self.tools[selected_tool_id]["queue"].append(permission_event)
                 self._check_trigger(selected_tool_id)
                 yield permission_event
                 run_now = True
@@ -1309,19 +1982,18 @@ class FabEnv(gym.Env):
                     )
                     self._log_lot_event(lot_name, product_name, route_name, int(step.step_seq), m_name, selected_tool_id, "FINISH")
                     self._log_tool_state(m_name, selected_tool_id, "IDLE", setup_name=tool["current_setup"], lot_id=lot_name)
+                    pieces = int(
+                        permission_event.payload.get("batch_total_wafers") or wafers_per_lot
+                    ) if is_batch else int(wafers_per_lot)
+                    self._record_pm_pieces(selected_tool_id, pieces)
+                    self._start_cqt_timer(
+                        lot_name, product_name, route_name, step, m_name, selected_tool_id,
+                    )
                     if is_batch:
                         done_evt = permission_event.payload.get("batch_done_event")
                         if done_evt is not None and not done_evt.triggered:
                             done_evt.succeed()
             stat.history[int(step.step_seq)] = self.sim_env.now
-
-            if lot_name in self.active_cqt and int(step.step_seq) == int(self.active_cqt[lot_name]["target_step"]):
-                self._log_lot_event(lot_name, product_name, route_name, int(step.step_seq), m_name, selected_tool_id, "CQT_END")
-                self._sync_cqt_table(
-                    lot_name, self.active_cqt[lot_name]["start_step"], self.active_cqt[lot_name]["target_step"],
-                    self.active_cqt[lot_name]["deadline_time"], self.active_cqt[lot_name]["started_at"], False
-                )
-                del self.active_cqt[lot_name]
 
             # sampling / rework
             if step.sampling_prob and float(step.sampling_prob) < 100.0:
@@ -1379,15 +2051,17 @@ class FabEnv(gym.Env):
 
     def _pm_process(self, tool_id, pm):
         m_name = self.tools[tool_id]["group"]
-        first = self._unit_to_minutes(pm.first_occurrence or pm.mtbf, pm.foa_unit or pm.mtbf_unit)
-        if first > 0:
-            yield self.sim_env.timeout(first)
+        td = self.tools[tool_id]
+        tool_index = int(td.get("tool_index", 0))
+        tool_count = max(1, int(td.get("tool_count", 1)))
+        foa_min = self._unit_to_minutes(pm.first_occurrence or pm.mtbf, pm.foa_unit or pm.mtbf_unit)
+        stagger = foa_min * (tool_index / float(tool_count)) if foa_min > 0 else 0.0
+        if stagger > 0:
+            yield self.sim_env.timeout(stagger)
         pieces_until_pm = max(1, int(pm.mtbf or 1))
         while True:
             if "counter" in str(pm.pm_type or "").lower():
-                # counter based approximation: periodic check using processed count
-                last_done = len(self.kpi["lots"])
-                while len(self.kpi["lots"]) - last_done < pieces_until_pm:
+                while self._pm_piece_count.get(tool_id, 0) < pieces_until_pm:
                     yield self.sim_env.timeout(1.0)
             else:
                 interval = self._unit_to_minutes(pm.mtbf, pm.mtbf_unit)
@@ -1401,6 +2075,8 @@ class FabEnv(gym.Env):
                 self._log_tool_state(m_name, tool_id, "DOWN_PM", reason=str(pm.pm_name or "PM"))
                 yield self.sim_env.timeout(duration)
                 self._log_tool_state(m_name, tool_id, "IDLE", reason="PM_DONE")
+                if "counter" in str(pm.pm_type or "").lower():
+                    self._pm_piece_count[tool_id] = 0
 
     def _breakdown_process(self, tool_id, bd):
         m_name = self.tools[tool_id]["group"]
@@ -1643,8 +2319,13 @@ class FabEnv(gym.Env):
     def _log_kpi_snapshot(self, level, scope, kpi_name, value,
                           window_minutes=None, numerator=None, denominator=None, meta=None,
                           snapshot_time=None):
-        """Append one KPI row to DB batch + level-specific CSV (cadence gating is in _emit_all_kpis)."""
-        t = float(self.sim_env.now if snapshot_time is None else snapshot_time)
+        """Append one KPI row to DB batch + level-specific CSV (cadence gating is in _emit_all_kpis).
+
+        `snapshot_time`, when provided by the caller, is expected to be in relative SimPy minutes;
+        we convert it to absolute (`t0 + now`) so DB/CSV consumers always see absolute fab time.
+        """
+        rel = float(self.sim_env.now if snapshot_time is None else snapshot_time)
+        t = rel + float(self._sim_clock_offset)
         v = None if value is None else float(value)
         wm = None if window_minutes is None else int(window_minutes)
         num = None if numerator is None else float(numerator)

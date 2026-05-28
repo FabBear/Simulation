@@ -1,0 +1,1 @@
+scenario_id,seq,lot_id,product,route_id,step_seq,step_name,tool_group,tool_id,event_kind,scheduled_time,scheduled_arrive_time,scheduled_end_time,proc_time_planned,setup_id,priority,due_date_sim,wafers_per_lot,is_frozen,mes_row_hash,source_line_no

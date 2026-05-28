@@ -1,0 +1,12 @@
+{
+  "run_id": "f5178b41645d",
+  "t0": 620.0,
+  "horizon": 60.0,
+  "wip_count": 47,
+  "queue_count": 39,
+  "release_count": 4,
+  "tool_count": 52,
+  "notes": [
+    "queue Diffusion_FE_120#1: kpi q_len=0 but 39 queue candidates kept (no KPI row or empty queue)"
+  ]
+}

@@ -24,7 +24,7 @@ docker compose up -d db
 cd simulation
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python init_db.py    # 전용 DB 권장 (drop_all)
+.venv/bin/python init_db.py    # 전용 DB 권장 (drop_all). ProcessStep CQT 컬럼 변경 시 재실행 필수
 
 export SIM_CSV_DIR=./sim_csv_out
 export SIM_END_MINUTES=2000
@@ -42,7 +42,8 @@ cd simulation
 # 기존 run_id 덮어쓰기: --truncate-run
 ```
 
-매핑 상세: [docs/CSV_DB_MAPPING.md](docs/CSV_DB_MAPPING.md)
+매핑 상세: [docs/CSV_DB_MAPPING.md](docs/CSV_DB_MAPPING.md)  
+KPI 4종 CSV 가이드: [docs/KPI_CSV_4FILES.md](docs/KPI_CSV_4FILES.md)
 
 ## 환경 파일
 
@@ -57,9 +58,10 @@ cd simulation
 - PPO `logs/*.zip`
 - `SMT_2020 - Final/` AutoSched 데이터
 - `backend_manager.py`, `main_api.py` (Digital Twin API)
+- V1 MES REPLAY schedule grid (`mes_schedule_event` TRACK_IN) — see V2 `docs/MES_FORWARD_WHATIF_SCHEMA.md`
 
 ## 다음 단계
 
 What-if 시뮬: `simulation/core/`, `simulation/schemas/` (스냅샷 + action + 부분 스케줄 + KPI).
 
-자세한 KPI·DB 설명: [docs/README_DOCKER.md](docs/README_DOCKER.md)
+자세한 실행·Docker: [docs/README_DOCKER.md](docs/README_DOCKER.md) · KPI: [docs/KPI_CSV_4FILES.md](docs/KPI_CSV_4FILES.md)

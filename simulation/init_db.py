@@ -113,6 +113,10 @@ def import_routes(db):
                 rework_target_step=clean(row.get('STEP FOR REWORK')),
                 sampling_prob=clean(row.get('PROCESSING PROBABILITY in % (Sampling)')),
                 
+                cqt_anchor_step=(
+                    int(row['STEP']) if pd.notna(row.get('CQT')) and pd.notna(row.get('STEP')) else None
+                ),
+                cqt_target_step=clean(row.get('STEP FOR CRITICAL QUEUE TIME')),
                 cqt_start_step=clean(row.get('STEP FOR CRITICAL QUEUE TIME')),
                 cqt_limit=clean(row.get('CQT')),
                 cqt_unit=clean(row.get('CQTUNITS'))
@@ -243,7 +247,8 @@ def import_setup_transport(db):
 def import_lot_release(db):
     print("📥 Lot Release 데이터 로딩 중...")
     
-    files = ["SMT_3_Lotrelease.xlsx", "SMT_3_Lotrelease_Engineering.xlsx"]
+    # Engineering xlsx is 8-year discrete benchmark — not used by FabEnv batch sim.
+    files = ["SMT_3_Lotrelease.xlsx"]
     
     for filename in files:
         print(f"   📄 파일 읽는 중: {filename}")

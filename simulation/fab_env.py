@@ -15,7 +15,7 @@ import uuid
 from database import SessionLocal
 from models import (
     ToolGroup, LotRelease, ProcessStep, SetupInfo, BreakdownEvent, PMEvent, TransportTime,
-    SimulationLog, LotEventLog, ToolStateLog, ActiveCqtTimer, RealtimeWipSummary, KpiSnapshot,
+    SimulationLog, LotEventLog, LotReleaseLedger, ToolStateLog, ActiveCqtTimer, RealtimeWipSummary, KpiSnapshot,
     SimulationRun,
     MesScenario, MesScenarioRun,
     MesWipSnapshot, MesToolSnapshot, MesToolQueueSnapshot, MesCqtSnapshot,
@@ -151,6 +151,10 @@ _SIM_CSV_LOT_EVENT_FIELDS = (
     "run_id", "lot_id", "product", "route_id", "step_seq", "tool_group", "tool_id",
     "event_type", "event_time", "detail_1", "detail_2",
 )
+_SIM_CSV_LOT_RELEASE_LEDGER_FIELDS = (
+    "run_id", "scenario_id", "lot_id", "lot_type", "product_name", "route_name",
+    "sim_now_min", "due_date_sim_min", "priority", "is_super_hot", "wafers_per_lot", "source",
+)
 _SIM_CSV_TOOL_STATE_FIELDS = (
     "run_id", "tool_group", "tool_id", "state", "state_change_time", "setup_name", "lot_id", "reason",
     "idle_units", "run_units", "setup_units", "down_pm_units", "down_bm_units",
@@ -284,6 +288,7 @@ class FabEnv(gym.Env):
         self._kpi_finish_log = deque()                       # deque of (finish_time, release_time)
         self._kpi_lot_rtf = {}                               # lot_name -> {release_time, due_date, finish_time}
         self._kpi_release_count = 0                          # cumulative released lots
+        self._kpi_release_ledger_count = 0                   # rows written to lot_release_ledger
         self._kpi_finish_count = 0                           # cumulative finished lots
         self._kpi_batch = []                                 # buffer flushed in one DB session per snapshot pass
         self._kpi_last_emit = {}                             # cadence_min -> last sim time emitted
@@ -350,6 +355,7 @@ class FabEnv(gym.Env):
         self._kpi_finish_log = deque()
         self._kpi_lot_rtf = {}
         self._kpi_release_count = 0
+        self._kpi_release_ledger_count = 0
         self._kpi_finish_count = 0
         self._kpi_batch = []
         self._kpi_last_emit = {}
@@ -562,6 +568,67 @@ class FabEnv(gym.Env):
                     "event_type": event_type, "event_time": ev_time, "detail_1": detail_1, "detail_2": detail_2,
                 },
             )
+
+    def _log_lot_release_ledger(
+        self,
+        lot_id,
+        lot_type,
+        product_name,
+        route_name,
+        lot_due_date_rel,
+        priority,
+        is_super_hot,
+        wafers_per_lot,
+        source,
+    ):
+        """One row per lot at release (CSV + DB). due_date in absolute fab minutes."""
+        sim_now_abs = float(self._sim_now_abs())
+        due_abs = float(lot_due_date_rel) + float(self._sim_clock_offset)
+        scenario_id = str(self._scenario_id or os.environ.get("SIM_SCENARIO_ID") or "")
+        row = {
+            "run_id": self._csv_run_id,
+            "scenario_id": scenario_id,
+            "lot_id": str(lot_id),
+            "lot_type": str(lot_type or ""),
+            "product_name": str(product_name or ""),
+            "route_name": str(route_name or ""),
+            "sim_now_min": sim_now_abs,
+            "due_date_sim_min": due_abs,
+            "priority": int(priority or 0),
+            "is_super_hot": 1 if is_super_hot else 0,
+            "wafers_per_lot": int(wafers_per_lot or 1),
+            "source": str(source or ""),
+        }
+        try:
+            db = SessionLocal()
+            db.add(LotReleaseLedger(
+                run_id=row["run_id"],
+                scenario_id=row["scenario_id"] or None,
+                lot_id=row["lot_id"],
+                lot_type=row["lot_type"] or None,
+                product_name=row["product_name"] or None,
+                route_name=row["route_name"] or None,
+                sim_now_min=row["sim_now_min"],
+                due_date_sim_min=row["due_date_sim_min"],
+                priority=row["priority"],
+                is_super_hot=bool(is_super_hot),
+                wafers_per_lot=row["wafers_per_lot"],
+                source=row["source"] or None,
+            ))
+            db.commit()
+            db.close()
+        except Exception:
+            pass
+        csv_dir = self._sim_csv_dir()
+        if csv_dir:
+            _append_sim_csv(
+                csv_dir,
+                self._csv_lock,
+                "lot_release_ledger.csv",
+                _SIM_CSV_LOT_RELEASE_LEDGER_FIELDS,
+                row,
+            )
+        self._kpi_release_ledger_count += 1
 
     def _emit_tool_state_row(self, tool_group, tool_id, state, t, setup_name, lot_id, reason, counts):
         """Write a single tool_state row to DB + CSV.
@@ -866,7 +933,7 @@ class FabEnv(gym.Env):
         if not self._skip_master_lot_release:
             for r in releases:
                 if r.wafers_per_lot and r.wafers_per_lot > 0:
-                    self.sim_env.process(self._source_process(r))
+                    self.sim_env.process(self._source_process(r, release_source="master"))
                     master_spawned += 1
         self.sim_env.process(self._snapshot_loop())
         self.sim_env.process(self._kpi_snapshot_loop())
@@ -1184,7 +1251,7 @@ class FabEnv(gym.Env):
                 lot_type=r.lot_type,
                 is_super_hot_lot="yes" if r.is_super_hot else "no",
             )
-            self.sim_env.process(self._source_process(adapter))
+            self.sim_env.process(self._source_process(adapter, release_source="mes_plan"))
             spawned += 1
         return spawned
 
@@ -1236,6 +1303,23 @@ class FabEnv(gym.Env):
                 for ev in tool["queue"]:
                     if getattr(ev, "payload", {}).get("name") == lot_id:
                         ev.payload["priority"] = pri
+        elif kind == "SET_SUPER_HOT":
+            is_hot = bool(payload.get("super_hot", False))
+            if lot_id and lot_id in self.active_lots_data:
+                self.active_lots_data[lot_id]["super_hot"] = is_hot
+            for tool in self.tools.values():
+                for ev in tool["queue"]:
+                    if getattr(ev, "payload", {}).get("name") == lot_id:
+                        ev.payload["super_hot"] = is_hot
+        elif kind == "REQUEUE_TOOL":
+            self._requeue_lot_tool(
+                lot_id=str(lot_id or ""),
+                tool_group=str(payload.get("tool_group") or a.tool_group or ""),
+                to_tool_id=str(payload.get("to_tool_id") or ""),
+                from_tool_id=(str(payload["from_tool_id"]) if payload.get("from_tool_id") else None),
+                step_seq=int(payload["step_seq"]) if payload.get("step_seq") is not None else a.step_seq,
+                action_id=int(a.id) if getattr(a, "id", None) is not None else None,
+            )
         elif kind == "LOT_HOLD":
             if lot_id:
                 self.hold_lots.add(lot_id)
@@ -1277,11 +1361,127 @@ class FabEnv(gym.Env):
                 lot_type=payload.get("lot_type"),
                 is_super_hot_lot="yes" if payload.get("is_super_hot") else "no",
             )
-            self.sim_env.process(self._source_process(adapter))
+            self.sim_env.process(self._source_process(adapter, release_source="whatif"))
         else:
             self._mes_scenario_validation_report.setdefault("unknown_actions", []).append({
                 "kind": kind, "id": int(a.id),
             })
+
+    def _requeue_lot_tool(
+        self,
+        lot_id: str,
+        tool_group: str,
+        to_tool_id: str,
+        from_tool_id: str | None = None,
+        step_seq: int | None = None,
+        action_id: int | None = None,
+    ) -> bool:
+        """Move a queued lot from one tool queue to another within the same tool group."""
+        report = self._mes_scenario_validation_report
+
+        def _err(msg: str) -> bool:
+            report.setdefault("action_errors", []).append({
+                "id": action_id, "kind": "REQUEUE_TOOL", "lot_id": lot_id, "err": msg,
+            })
+            return False
+
+        if not lot_id or not to_tool_id or not tool_group:
+            return _err("lot_id, tool_group, and to_tool_id are required")
+        if to_tool_id not in self.tools:
+            return _err(f"unknown to_tool_id: {to_tool_id}")
+        mg = self.machine_groups.get(tool_group) or {}
+        tool_ids = set(mg.get("tool_ids") or [])
+        if tool_ids and to_tool_id not in tool_ids:
+            return _err(f"{to_tool_id} not in tool_group {tool_group}")
+
+        lot_stat = (self.active_lots_data.get(lot_id) or {}).get("status", "")
+        if lot_stat == "PROCESSING":
+            return _err(f"lot {lot_id} is PROCESSING; cannot requeue")
+
+        for tid, td in self.tools.items():
+            if td["resource"].count > 0:
+                proc = getattr(td["resource"], "users", None) or []
+                for u in proc:
+                    pname = getattr(u, "name", None) or getattr(u, "id", None)
+                    if pname == lot_id:
+                        return _err(f"lot {lot_id} holds resource on {tid}")
+
+        def _matches(ev) -> bool:
+            p = getattr(ev, "payload", {}) or {}
+            return p.get("name") == lot_id
+
+        found_evt = None
+        source_tid = None
+        search_tools = [from_tool_id] if from_tool_id else list(self.tools.keys())
+        for tid in search_tools:
+            if tid not in self.tools:
+                continue
+            if tool_ids and tid not in tool_ids:
+                continue
+            for ev in self.tools[tid]["queue"]:
+                if _matches(ev):
+                    found_evt = ev
+                    source_tid = tid
+                    break
+            if found_evt:
+                break
+
+        if found_evt is None:
+            for batch_id, q in self.batch_queues.items():
+                if tool_ids and batch_id[2] not in tool_ids:
+                    continue
+                if from_tool_id and batch_id[2] != from_tool_id:
+                    continue
+                for ev in q:
+                    if _matches(ev):
+                        found_evt = ev
+                        source_tid = batch_id[2]
+                        q.remove(ev)
+                        break
+                if found_evt:
+                    break
+
+        if found_evt is None or source_tid is None:
+            return _err(f"lot {lot_id} not found in queue for {tool_group}")
+
+        if step_seq is not None:
+            ev_seq = int((found_evt.payload or {}).get("step_seq") or -1)
+            if ev_seq != int(step_seq):
+                report.setdefault("action_warnings", []).append({
+                    "id": action_id, "kind": "REQUEUE_TOOL",
+                    "warn": f"step_seq mismatch: event={ev_seq} payload={step_seq}",
+                })
+
+        if source_tid == to_tool_id:
+            return True
+
+        self.tools[source_tid]["queue"] = [
+            ev for ev in self.tools[source_tid]["queue"] if ev is not found_evt
+        ]
+
+        payload = found_evt.payload or {}
+        if not payload.get("req_setup"):
+            route_id = (
+                payload.get("route_id")
+                or payload.get("route")
+                or (self.active_lots_data.get(lot_id) or {}).get("product")
+            )
+            if route_id:
+                steps = self.routes.get(route_id, [])
+                seq = int(payload.get("step_seq") or 0)
+                for st in steps:
+                    if int(st.step_seq) == seq and st.setup_id:
+                        payload["req_setup"] = st.setup_id
+                        break
+        payload["tool_id"] = to_tool_id
+        found_evt.payload = payload
+        found_evt.enqueue_time = float(self.sim_env.now)
+        self.tools[to_tool_id]["queue"].append(found_evt)
+        if lot_id in self.active_lots_data:
+            self.active_lots_data[lot_id]["tool_id"] = to_tool_id
+            self.active_lots_data[lot_id]["status"] = "Queuing"
+        self._check_trigger(to_tool_id)
+        return True
 
     def finalize_mes_scenario_run(self):
         """Mark the scenario DONE and update mes_scenario_run.finished_at."""
@@ -1385,7 +1585,7 @@ class FabEnv(gym.Env):
             return [], total_wafers
         return group, total_wafers
 
-    def _source_process(self, r):
+    def _source_process(self, r, release_source="master"):
         start_delay = calc_minutes(r.start_date)
         target_lead_min = compute_target_lead_minutes(r.start_date, r.due_date)
         base_due_min = calc_minutes(r.due_date)
@@ -1417,6 +1617,17 @@ class FabEnv(gym.Env):
                 return
             preferred = r.lot_type if r.lot_type else None
             lot_name = self._next_lot_name(r.product_name, preferred_name=preferred)
+            self._log_lot_release_ledger(
+                lot_id=lot_name,
+                lot_type=preferred or "",
+                product_name=r.product_name,
+                route_name=r.route_name,
+                lot_due_date_rel=float(lot_due_date),
+                priority=int(r.priority or 0),
+                is_super_hot=is_super,
+                wafers_per_lot=wafers,
+                source=release_source,
+            )
             self._kpi_lot_rtf[lot_name] = {
                 "release_time": float(self.sim_env.now),
                 "due_date": float(lot_due_date),
@@ -1557,8 +1768,9 @@ class FabEnv(gym.Env):
                 continue
             super_hot_key = 0 if p.get("super_hot", False) else 1
             setup_time = self.setup_mgr.get_setup_time(t_data["current_setup"], p.get("req_setup"))
+            enqueue_time = float(getattr(evt, "enqueue_time", self.sim_env.now))
             cr = self._critical_ratio(p.get("due_date", 0.0), p.get("rem_steps", 1))
-            ranked.append((super_hot_key, -int(p.get("priority", 0)), setup_time, cr, idx))
+            ranked.append((super_hot_key, -int(p.get("priority", 0)), setup_time, enqueue_time, cr, idx))
         if not ranked:
             return 0
         # P4: superhot lots first when group rule or payload says superhot (no RUN preemption).
@@ -1566,9 +1778,9 @@ class FabEnv(gym.Env):
             super_only = [item for item in ranked if item[0] == 0]
             if super_only:
                 ranked = super_only
-        # Hybrid default: superhot -> highest priority -> least setup -> critical ratio
-        ranked.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
-        # ranking override by toolgroup columns
+        # Default (no TG ranking columns): superhot -> priority -> setup -> FIFO -> CR -> idx
+        ranked.sort(key=lambda x: (x[0], x[1], x[2], x[3], x[4], x[5]))
+        # ranking override by toolgroup columns (SMT2020: R1 priority, R2 setup, R3 FIFO); CR always after FIFO
         rank_map = {
             str(tg.ranking_1 or "").lower(): 0,
             str(tg.ranking_2 or "").lower(): 1,
@@ -1576,12 +1788,18 @@ class FabEnv(gym.Env):
         }
         if any(rank_map.keys()):
             def override_key(item):
-                super_hot_key, neg_pri, setup_time, cr, idx = item
-                fields = {"highest lotpriority": neg_pri, "least setuptime": setup_time, "critical ratio": cr}
+                super_hot_key, neg_pri, setup_time, enqueue_time, cr, idx = item
+                fields = {
+                    "highest lotpriority": neg_pri,
+                    "least setuptime": setup_time,
+                    "fifo": enqueue_time,
+                    "critical ratio": cr,
+                }
                 key = [super_hot_key]
                 for k in [str(tg.ranking_1 or "").lower(), str(tg.ranking_2 or "").lower(), str(tg.ranking_3 or "").lower()]:
-                    if k in fields:
+                    if k in fields and k != "critical ratio":
                         key.append(fields[k])
+                key.append(cr)
                 key.append(idx)
                 return tuple(key)
             ranked.sort(key=override_key)
@@ -1652,10 +1870,10 @@ class FabEnv(gym.Env):
         tg = t_data["toolgroup"]
         wakeup = str(getattr(tg, "tool_wakeup_ranking", None) or "").lower()
         keys = []
-        if "least setuptime" in wakeup or "least setup" in wakeup:
-            keys.append(self.setup_mgr.get_setup_time(t_data["current_setup"], step.setup_id))
         if "shortest queue" in wakeup or "least queue" in wakeup:
             keys.append(len(t_data["queue"]))
+        if "least setuptime" in wakeup or "least setup" in wakeup:
+            keys.append(self.setup_mgr.get_setup_time(t_data["current_setup"], step.setup_id))
         if "idle first" in wakeup:
             keys.append(0 if t_data["resource"].count == 0 else 1)
         other_prod = (
@@ -1665,7 +1883,8 @@ class FabEnv(gym.Env):
         queue_len = len(t_data["queue"])
         busy = t_data["resource"].count
         setup_time = self.setup_mgr.get_setup_time(t_data["current_setup"], step.setup_id)
-        return tuple(keys + [other_prod, busy, queue_len, setup_time, tool_id])
+        # Default suffix (SMT2020-style): shortest queue -> least setup -> idle -> product affinity -> tool_id
+        return tuple(keys + [queue_len, setup_time, busy, other_prod, tool_id])
 
     def _choose_tool_for_lot(self, lot_name, step, group_name, product_name):
         candidate_ids = self._resolve_tool_candidates(lot_name, step, group_name)
@@ -1715,20 +1934,12 @@ class FabEnv(gym.Env):
         self._ensure_active_lot_entry(lot_name, route_name, due_date, len(steps))
         sim_now = float(self.sim_env.now)
         due_f = float(due_date)
-        remaining_to_due = max(0.0, due_f - sim_now)
         off = float(self._sim_clock_offset)
         if not suppress_init_logs:
             self._log_lot_event(
                 lot_name, product_name, route_name, None, None, None, "ARRIVAL",
                 detail_1=str(sim_now + off),
-                detail_2=json.dumps(
-                    {
-                        "sim_now_min": sim_now + off,
-                        "due_date_sim_min": due_f + off,
-                        "remaining_to_due_min": remaining_to_due,
-                    },
-                    ensure_ascii=True,
-                ),
+                detail_2=None,
             )
         i = int(start_idx)
         while i < len(steps):

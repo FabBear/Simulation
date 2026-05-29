@@ -262,6 +262,31 @@ class LotEventLog(Base):
     detail_1 = Column(String, nullable=True)
     detail_2 = Column(String, nullable=True)
 
+
+class LotReleaseLedger(Base):
+    """One row per lot at fab release (FORWARD/cold-start run log)."""
+
+    __tablename__ = "lot_release_ledger"
+    __table_args__ = (
+        Index("ix_lot_release_ledger_run", "run_id"),
+        UniqueConstraint("run_id", "lot_id", name="uq_lot_release_ledger_run_lot"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(String, index=True, nullable=True)
+    scenario_id = Column(String(64), nullable=True)
+    lot_id = Column(String, index=True, nullable=False)
+    lot_type = Column(String, nullable=True)
+    product_name = Column(String, nullable=True)
+    route_name = Column(String, nullable=True)
+    sim_now_min = Column(Float, nullable=False)
+    due_date_sim_min = Column(Float, nullable=False)
+    priority = Column(Integer, nullable=True)
+    is_super_hot = Column(Boolean, nullable=False, default=False)
+    wafers_per_lot = Column(Integer, nullable=True)
+    source = Column(String(32), nullable=True)
+
+
 class ToolStateLog(Base):
     __tablename__ = "tool_state_log"
 

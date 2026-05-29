@@ -40,6 +40,7 @@
 | 소스 | 경로/테이블 | 용도 |
 |------|-------------|------|
 | Raw log | `sim_csv_out/lot_events.csv` | ARRIVAL, LOADING, FINISH, … |
+| Raw log | `sim_csv_out/lot_release_ledger.csv` | release 1회 스냅샷 (`sim_now_min`, `due_date_sim_min`, …) — **우선** |
 | Raw log | `sim_csv_out/tool_state.csv` | T0 tool `op_state`, `setup_name`, `lot_id` |
 | Raw log | `sim_csv_out/simulation_process.csv` | **완료된 step** 이력만 (in-flight 부적합) |
 | KPI | `sim_csv_out/kpi_tool.csv` | T0 `@ snapshot_time` 의 `q_len`, `processing_count` |

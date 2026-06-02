@@ -256,7 +256,43 @@ def _choose_tool(
     return cands[0]
 
 
-def _load_lot_traces(path: Path, run_id: str, t_end: float) -> Dict[str, LotTrace]:
+def _load_release_ledger(path: Path, run_id: str) -> Dict[str, dict]:
+    if not path.is_file():
+        return {}
+    out: Dict[str, dict] = {}
+    for row in _iter_csv(path, run_id):
+        lot_id = (row.get("lot_id") or "").strip()
+        if lot_id:
+            out[lot_id] = row
+    return out
+
+
+def _apply_ledger_to_traces(traces: Dict[str, LotTrace], ledger: Dict[str, dict]) -> None:
+    for lot_id, row in ledger.items():
+        tr = traces.setdefault(lot_id, LotTrace(lot_id=lot_id))
+        if row.get("due_date_sim_min") not in (None, ""):
+            tr.due_date_sim = _float(row.get("due_date_sim_min"))
+        sim_now = _float(row.get("sim_now_min"), -1.0)
+        if sim_now >= 0:
+            tr.arrival_time = sim_now
+        tr.product = (row.get("product_name") or tr.product or "").strip()
+        tr.route_id = (row.get("route_name") or tr.route_id or "").strip()
+        if row.get("priority") not in (None, ""):
+            tr.priority = _int(row.get("priority"), 0)
+        sh = row.get("is_super_hot")
+        if sh is not None and str(sh).strip() != "":
+            tr.is_super_hot = str(sh).strip().lower() in ("1", "true", "yes")
+        if row.get("wafers_per_lot") not in (None, ""):
+            tr.wafers_per_lot = _int(row.get("wafers_per_lot"), 1)
+
+
+def _load_lot_traces(
+    path: Path,
+    run_id: str,
+    t_end: float,
+    ledger: Optional[Dict[str, dict]] = None,
+) -> Dict[str, LotTrace]:
+    ledger = ledger or {}
     traces: Dict[str, LotTrace] = {}
     for row in _iter_csv(path, run_id):
         et = _float(row.get("event_time"))
@@ -274,9 +310,12 @@ def _load_lot_traces(path: Path, run_id: str, t_end: float) -> Dict[str, LotTrac
 
         if ev == "ARRIVAL":
             tr.arrival_time = et
-            d2 = _parse_detail2(row.get("detail_2"))
-            if "due_date_sim_min" in d2:
-                tr.due_date_sim = float(d2["due_date_sim_min"])
+            if lot_id in ledger and ledger[lot_id].get("due_date_sim_min") not in (None, ""):
+                tr.due_date_sim = _float(ledger[lot_id].get("due_date_sim_min"))
+            else:
+                d2 = _parse_detail2(row.get("detail_2"))
+                if "due_date_sim_min" in d2:
+                    tr.due_date_sim = float(d2["due_date_sim_min"])
         elif ev == "FINISH" and step_seq >= 0:
             tr.finished_steps.add(step_seq)
             if tr.last_open_step == step_seq:
@@ -364,6 +403,46 @@ def _lot_defaults(master: MasterContext, tr: LotTrace) -> None:
         tr.is_super_hot = bool(d.get("is_super_hot", False))
 
 
+def _release_rows_from_ledger(
+    ledger: Dict[str, dict],
+    t0: float,
+    t_end: float,
+    wip_lot_ids: Set[str],
+    master: MasterContext,
+    traces: Dict[str, LotTrace],
+    scenario_id: str,
+) -> List[dict]:
+    rows: List[dict] = []
+    for lot_id, row in ledger.items():
+        et = _float(row.get("sim_now_min"))
+        if et <= t0 or et > t_end:
+            continue
+        if lot_id in wip_lot_ids:
+            continue
+        tr = traces.get(lot_id) or LotTrace(lot_id=lot_id)
+        tr.product = (row.get("product_name") or tr.product or "").strip()
+        tr.route_id = (row.get("route_name") or tr.route_id or "").strip()
+        _lot_defaults(master, tr)
+        due = _float(row.get("due_date_sim_min"), et)
+        is_super = str(row.get("is_super_hot", "")).strip().lower() in ("1", "true", "yes")
+        rows.append({
+            "scenario_id": scenario_id,
+            "product_name": tr.product,
+            "route_name": tr.route_id,
+            "release_time": et,
+            "lots_count": 1,
+            "release_interval": 0,
+            "due_date_sim": due,
+            "wafers_per_lot": _int(row.get("wafers_per_lot"), tr.wafers_per_lot),
+            "priority": _int(row.get("priority"), tr.priority),
+            "is_super_hot": "true" if is_super else "false",
+            "lot_type": (row.get("lot_type") or lot_id).strip(),
+            "lot_name_prefix": "",
+            "source_lot_release_id": "",
+        })
+    return rows
+
+
 def _current_step_for_lot(tr: LotTrace, steps: List[ProcessStepRow], t0: float) -> Optional[int]:
     if tr.last_open_step is not None and tr.last_open_step not in tr.finished_steps:
         return tr.last_open_step
@@ -380,11 +459,14 @@ def build_scenario(
 ) -> dict:
     t_end = t0 + horizon
     lot_path = sim_csv_dir / "lot_events.csv"
+    ledger_path = sim_csv_dir / "lot_release_ledger.csv"
     tool_path = sim_csv_dir / "tool_state.csv"
     kpi_path = sim_csv_dir / "kpi_tool.csv"
     process_path = sim_csv_dir / "simulation_process.csv"
 
-    traces = _load_lot_traces(lot_path, run_id, t_end)
+    ledger = _load_release_ledger(ledger_path, run_id)
+    traces = _load_lot_traces(lot_path, run_id, t_end, ledger)
+    _apply_ledger_to_traces(traces, ledger)
     ltl_lock = _load_ltl_lock(process_path, run_id, t0)
     tool_last, run_lot = _load_tool_state_at(tool_path, run_id, t0)
     q_len, _proc_count = _load_kpi_tool_at(kpi_path, run_id, t0)
@@ -524,7 +606,15 @@ def build_scenario(
             "held_lot_id": "",
         })
 
-    release_rows: List[dict] = []
+    release_rows: List[dict] = _release_rows_from_ledger(
+        ledger, t0, t_end, wip_lot_ids, master, traces, scenario_id,
+    )
+    ledger_release_lots = {
+        lid
+        for lid, row in ledger.items()
+        if lid not in wip_lot_ids
+        and t0 < _float(row.get("sim_now_min")) <= t_end
+    }
     for row in _iter_csv(lot_path, run_id):
         if (row.get("event_type") or "").strip().upper() != "ARRIVAL":
             continue
@@ -532,7 +622,7 @@ def build_scenario(
         if et <= t0 or et > t_end:
             continue
         lot_id = (row.get("lot_id") or "").strip()
-        if lot_id in wip_lot_ids:
+        if lot_id in wip_lot_ids or lot_id in ledger_release_lots:
             continue
         tr = traces.get(lot_id) or LotTrace(lot_id=lot_id)
         d2 = _parse_detail2(row.get("detail_2"))
@@ -553,6 +643,10 @@ def build_scenario(
             "lot_name_prefix": "",
             "source_lot_release_id": "",
         })
+    if ledger:
+        confidence_notes.append(
+            f"release plan: {len(ledger_release_lots)} lots from lot_release_ledger.csv"
+        )
 
     return {
         "tool_rows": tool_rows,

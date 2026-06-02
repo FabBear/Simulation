@@ -123,6 +123,16 @@ def test_apply_whatif_actions_locked_ssot_payloads():
     env._apply_whatif_action(_Action("SKIP_RELEASE", {"mes_lot_release_plan_id": 42}))
     assert 42 in env.skip_release_ids
 
+    env.tools["TG#1"] = {
+        "group": "TG", "queue": [], "resource": None,
+        "current_setup": None, "toolgroup": None, "op_state": "IDLE",
+    }
+    ev = type("E", (), {})()
+    ev.payload = {"name": "L1", "super_hot": False}
+    env.tools["TG#1"]["queue"] = [ev]
+    env._apply_whatif_action(_Action("SET_SUPER_HOT", {"super_hot": True}, lot_id="L1"))
+    assert ev.payload["super_hot"] is True
+
 
 def test_lot_release_like_shape_matches_source_process_reads():
     """Adapter must expose the attributes `_source_process` actually touches."""

@@ -150,6 +150,7 @@ def main() -> int:
         f"sim_now_abs={env._sim_now_abs():.1f} terminated={terminated}"
     )
     print(f"Release count (scenario)         : {env._kpi_release_count}")
+    print(f"lot_release_ledger rows          : {env._kpi_release_ledger_count}")
     print(f"Finished lots                    : {env._kpi_finish_count}")
     print(f"Active lots remaining at horizon : {len(env.active_lots_data)}")
     print(f"Run id (simulation_run)          : {env._csv_run_id}")

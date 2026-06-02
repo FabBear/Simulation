@@ -58,5 +58,6 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, expire_on_commit=
 
 # 3. 테이블 생성 함수 (이걸 실행하면 DB에 빈 테이블들이 쫘악 생깁니다!)
 def create_tables():
+    """Create any missing tables (e.g. lot_release_ledger). Safe to re-run on existing DBs."""
     Base.metadata.create_all(bind=engine)
     print("✅ 데이터베이스 테이블 생성 완료!")

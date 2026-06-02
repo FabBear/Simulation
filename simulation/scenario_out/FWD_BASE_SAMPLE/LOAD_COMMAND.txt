@@ -1,0 +1,4 @@
+# Replace CSVs from build_forward_scenario_from_csv.py, then:
+python load_mes_scenario.py --create-tables --scenario-id FWD_BASE_SAMPLE --mode FORWARD --t0 10080 --horizon 120 --tools scenario_out/FWD_BASE_SAMPLE/mes_tool_snapshot.csv --queues scenario_out/FWD_BASE_SAMPLE/mes_tool_queue_snapshot.csv --wip scenario_out/FWD_BASE_SAMPLE/mes_wip_snapshot.csv --releases scenario_out/FWD_BASE_SAMPLE/mes_lot_release_plan.csv
+python tools/promote_scenario.py --scenario-id FWD_BASE_SAMPLE --status VALIDATED
+python run_sim_forward_once.py --scenario-id FWD_BASE_SAMPLE --csv-dir sim_csv_out/base_sample

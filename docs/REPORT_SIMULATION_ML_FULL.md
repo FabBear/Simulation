@@ -7,7 +7,8 @@
 | 프로젝트 | FabGuard PoC — 공정 병목 대응 AI Agent |
 | 대상 독자 | SKALA 3기 2팀, FabGuard PoC 이해관계자 |
 | SSOT 코드 | `FAB_BEAR/simulation/fab_env.py`, `models.py` |
-| 작성 기준일 | 2026-05-22 |
+| 작성 기준일 | 2026-06-01 (§7-1 TG scaling · §9 SHAP · enc off 권장 설정 반영) |
+| SSOT 노트북 | `FAB_BEAR/simulation/ML/data_labeling.ipynb` |
 | 선행 문서 | [REPORT_SIMULATION_KPI.md](./REPORT_SIMULATION_KPI.md), [KPI_CSV_4FILES.md](./KPI_CSV_4FILES.md) |
 
 ---
@@ -69,15 +70,18 @@ flowchart LR
 
 KPI 4파일은 **long-format** (`kpi_name`당 1행). 병목 ML의 1차 입력은 **`kpi_toolgroup.csv` + `kpi_tool.csv` 집계**이다.
 
-### 1.3 ML 한 줄 요약
+### 1.3 ML 한 줄 요약 (2026-06-01 권장 설정)
 
 | 항목 | 내용 |
 |------|------|
-| 예측 단위 | **Tool Group** (`toolgroup`) |
-| 입력 | 시각 `t`의 KPI wide feature |
-| 라벨 | 시각 **`t + H`** KPI로 계산한 규칙 기반 `y_bottleneck` |
-| 모델 | `XGBClassifier` (pooled, TG `LabelEncoder` 포함) |
-| 추론 설계 | 행별 P(y=1) → 동일 `t`에서 Top-K TG |
+| 예측 단위 | **Tool Group** × 시각 `t` (패널: 스냅당 **106 TG**) |
+| 입력 | 시각 **`t`** KPI + **`Δ(t−120)`** — **§7-1 TG별 min-max(0~1)** 후 **`toolgroup_enc` 없음** (`USE_TOOLGROUP_ENC=False`) |
+| 라벨 | 시각 **`t + 120`** KPI에 REPORT §7.2 oracle → `y_bottleneck` (원시 KPI 기준, scaling 미적용) |
+| 임계값 | `wide` 분위수 → `Q`, **`Q_MAX`**, `W`, `WIP`, `A`, `U_hi`, `U_lo` · 분류 cutoff는 val **F1** 스윕(`BEST_THRESHOLD`, 예: 0.60) |
+| 모델 | `XGBClassifier`, **시간 블록 split** 70/15/15 |
+| PoC test (권장) | ROC-AUC **0.945**, 병목(1) F1 **0.807** @ proba≥0.7 (`ece173272af7`, enc off + TG scaling) |
+| 설명 | §9 **SHAP TreeExplainer** — 건별 KPI 기여 + REPORT 4축 한글 매핑 |
+| Agent 설계 | **Rule @ t**(현재 병목) + **ML @ t+120**(조기 경보) · Tier 0/1/2 (§4.10) |
 
 ### 1.4 Cold start vs FORWARD/WHAT-IF
 
@@ -185,31 +189,27 @@ export DISPATCH_MODE=rule
 
 **라벨 재현 (H=60):** `build_bottleneck_labels.py --csv-dir ./sample_csv` → **positive 616 / 8,268 (7.45%)**
 
-#### (B) 장기 run — `simulation/sim_csv_out/` (ML·EDA SSOT)
+#### (B) 장기 run — `simulation/sim_csv_out/` (노트북 SSOT, 2026-06-01)
 
 | 항목 | 값 |
 |------|-----|
-| `run_id` | `3e11c2ef42da` |
-| `snapshot_time` | **60 ~ 305,160** (분) |
-| instant 스냅 수 | **5,086** |
-| Tool / TG 수 | 1,535 / 106 |
+| `run_id` | **`ece173272af7`** (`data_labeling.ipynb` 로드 기준) |
+| `snapshot_time` | **60 ~ 313,560** (분) |
+| instant 스냅 수 | **5,226** (= 313560/60) |
+| TG 수 | **106** |
+| wide grain 행 | **553,956** (= 5,226 × 106) |
 
-| 파일 | 데이터 행 수 | 크기 |
-|------|-------------|------|
-| `kpi_fab.csv` | 25,854 | 1.9 MB |
-| `kpi_process.csv` | 366,192 | 34 MB |
-| `kpi_toolgroup.csv` | 3,234,696 | 207 MB |
-| `kpi_tool.csv` | **70,263,090** | **5.2 GB** |
-| `lot_events.csv` | 3,175,318 | 372 MB |
-| `simulation_process.csv` | 1,533,186 | 275 MB |
-| `tool_state.csv` | 6,068,980 | 493 MB |
-| **합계** | **84,667,316** | **~6.5 GB** |
+| 파일 | 데이터 행 수 (참고) |
+|------|---------------------|
+| `kpi_toolgroup.csv` | 3,323,736 long (= 553,956 × 6 KPI) |
+| `kpi_tool.csv` | chunk 집계 → `max_util`, `max_avg_q_time` |
 
-검증: `5,086 × 1,535 × 9 = 70,263,090` (`kpi_tool`) · `5,086 × 106 × 6 = 3,234,696` (`kpi_toolgroup`).
+**노트북 라벨 (H=120, 분위 임계):** `y_bottleneck` positive **155,711 / 553,744 (28.12%)**  
+**학습 행 (§7 delta 후):** **553,532** (= 앞·뒤 각 2스냅 × 106 TG drop)
 
-**라벨 (H=60, 기생성 파일):** `tg_bottleneck_labeled.csv` — **203,660 / 539,010 (37.78%)**
+> 이전 보고서의 `run_id=3e11c2ef42da`는 동일 파이프라인의 **다른 장기 run** 예시. ML 노트북은 현재 **`sim_csv_out/` + `ece173272af7`** 기준.
 
-> 장기 run은 단일 `run_id`이므로 XGBoost의 stratified random split은 **시간·TG 교차 일반화를 보장하지 않는다** (§4.5).
+**split:** 노트북 §8은 **시간 블록** 70/15/15 (stratified random **아님**). 단일 run이어도 test는 **미래 시점** hold-out.
 
 ---
 
@@ -297,119 +297,280 @@ rows_toolgroup ≈ N_snap × N_toolgroup × 6
 
 | 항목 | 내용 |
 |------|------|
-| 예측 단위 | Tool Group |
-| 입력 시각 | `t` — wide KPI + (선택) 파생 feature |
-| 라벨 시각 | **`t + H`** — 미래 KPI로 oracle 계산 |
+| 예측 단위 | Tool Group × snapshot_time (**패널 데이터**) |
+| 입력 시각 | **`t`** — KPI 수준 + (선택) **Δ(t−120)** |
+| 라벨 시각 | **`t + 120`** — REPORT oracle (`*_future` KPI) |
 | 과제 | 이진 `y_bottleneck` |
 | 운영 추론(설계) | P(y=1) ranking → Top-K; UI tier는 calibration 후 0.85/0.70/0.40 |
 
-### 4.2 Feature engineering 파이프라인
+**패널 해석:** 한 `snapshot_time`에 **106 TG 행**이 동시에 존재. ML 한 행 = “시각 t, TG g에서 2시간 뒤 병목 여부”. 추론 시 t마다 106개 확률 → **랭킹**.
+
+### 4.2 `data_labeling.ipynb` 파이프라인 (SSOT)
+
+| § | 내용 |
+|---|------|
+| **0~2** | 경로, `kpi_toolgroup.csv` long 로드 (`run_id`, 106 TG, t=60…313560) |
+| **3** | TG pivot → `tg_wide` (6 KPI) |
+| **4** | `kpi_tool.csv` chunk → TG별 `max_util`, `max_avg_q_time` merge → **`wide`** (553,956 × 10) |
+| **5** | EDA: 결측, 상관(Pearson/Spearman), describe, log1p 히스토그램, boxplot |
+| **6** | REPORT 라벨 H=120, 분위 임계 → `y_bottleneck` → **`wide_train`** |
+| **7** | lag 120분 merge → **`{kpi}_delta_120`** 5종 → **`wide_train`** (553,532행) |
+| **7-1** | **TG별 min-max(0~1)** — train 시간 70%만 fit, level+delta transform |
+| **8** | XGBoost, 시간 split 70/15/15, `USE_TOOLGROUP_ENC` 토글 |
+| **8-1** | validation threshold 스윕 → `BEST_THRESHOLD` |
+| **8+** | `_report`, feature importance, test 시계열 plot |
+| **9** | **SHAP** — 병목 예측 상위 N건 건별 KPI 근거 |
 
 ```mermaid
 flowchart TB
-  TG["kpi_toolgroup.csv\nlong"]
-  TOOL["kpi_tool.csv\nlong chunked"]
-  P1["pivot → tg_wide\n6 KPI cols"]
-  P2["groupby max\nmax_util, max_avg_q_time, max_q_len"]
-  M["merge on run_id, t, toolgroup"]
-  F["attach_future_labels\nshift t+H → *_future"]
-  Y["assign_bottleneck_labels\n→ y_bottleneck"]
-  XGB["XGBClassifier"]
+  TG["kpi_toolgroup.csv"]
+  TOOL["kpi_tool.csv chunk"]
+  W["wide (t)"]
+  FUT["attach_future t+120 → *_future"]
+  Y["assign_y_bottleneck_report"]
+  PAST["attach_past t-120 → *_lag120"]
+  D["delta_120 = kpi - kpi_lag120"]
+  SCL["§7-1 TG min-max\n(train 70% fit)"]
+  XGB["XGBClassifier\nKPI+delta only"]
 
-  TG --> P1 --> M
-  TOOL --> P2 --> M
-  M --> F --> Y --> XGB
+  TG --> W
+  TOOL --> W
+  W --> FUT --> Y
+  Y --> PAST --> D
+  W --> D
+  D --> SCL --> XGB
 ```
 
-| 단계 | 구현 | 비고 |
-|------|------|------|
-| TG pivot | `build_bottleneck_labels.pivot_toolgroup_long` | instant + util KPI |
-| Tool 집계 | `aggregate_tool_long` | `tool_id` → `#` 앞 TG; **max** |
-| Lookahead | `attach_future_labels` | inner merge → 끝 **2×H/P** 스텝 손실 |
-| 배치 출력 | `tg_bottleneck_labeled.csv` | 장기 run 539,010행 |
-| 실험 | `ML/data_labeling.ipynb` | EDA, 분위수 라벨, XGBoost |
+**행 수 변화 (60분 스냅, 106 TG):**
 
-### 4.3 라벨 oracle (weak label)
+| 단계 | 행 수 | drop |
+|------|------:|-----:|
+| `wide` | 553,956 | — |
+| §6 t+120 inner | 553,744 | 212 (= 2×106, run **끝** 2스냅) |
+| §7 t−120 inner | 553,532 | 212 (= 2×106, run **앞** 2스냅) |
+| **학습 usable** | **553,532** | `wide` 대비 **424행** (= 4스냅×106) |
 
-**REPORT 규칙** — `t+H` 시점 KPI (`*_future`)에 적용:
+### 4.3 라벨 oracle — REPORT §7.2 (`y_bottleneck`)
+
+**조건 (전부 `t+120` KPI, `*_future` 컬럼):**
 
 ```text
 y = 1  if
   ( q_time_min >= Q  AND  ( wait_ratio >= W  OR  wip >= N ) )
   OR ( available_tool_ratio <= A )
   OR ( max_util >= U_hi  AND  utilization_avg < U_lo )
-  OR ( max_avg_q_time >= Q  AND  wait_ratio >= W )
+  OR ( max_avg_q_time >= Q_MAX  AND  wait_ratio >= W )
 ```
 
-| 파라미터 | 기본값 | 의미 |
-|----------|--------|------|
-| Q | 30 | 대기 시간(분) |
-| W | 1 | wait_ratio |
-| N | 3 | wip |
-| A | 0.5 | 가용 tool 비율 하한 |
-| U_hi / U_lo | 0.8 / 0.5 | unit hot-spot (max util 높은데 TG 평균 util 낮음) |
+| 파라미터 | 노트북 설정 | 비고 |
+|----------|-------------|------|
+| Q | `q_time_min` upper **q=0.97** → ≈981 min | TG congestion |
+| **Q_MAX** | `max_avg_q_time` upper **q=0.97** → ≈1063 min | hot-spot queue (**Q와 독립**) |
+| W | `wait_ratio` upper q=0.97 → 4.5 | |
+| N (WIP) | `wip` upper q=0.97 → 44 | |
+| A | `available_tool_ratio` lower q=0.01 → 0.5 | |
+| U_hi / U_lo | `max_util` q=0.75 / `utilization_avg` lower q=0.95 | hot-spot util |
 
-코드 SSOT: `build_bottleneck_labels.assign_bottleneck_labels`, 노트북 `assign_y_bottleneck_report`.
+- `USE_FIXED_THRESHOLDS=True` → 문서 가이드 상수 (Q=30, Q_MAX=30, …)
+- `THR_REF_DF=None` → `wide` 전체 분위 (EDA용); **train-only ref** 권장 (누수 방지)
+- **삭제됨:** §6 분위수 OR weak label `y_bottleneck_pct` (REPORT와 무관, PoC에서 제외)
 
-#### Lookahead H: 60 vs 120
+코드 SSOT: 노트북 `assign_y_bottleneck_report` · 배치 `build_bottleneck_labels.py` (Q_MAX 미반영 시 스크립트와 diff 주의)
 
-| 출처 | H | positive rate (참고) |
-|------|---|----------------------|
-| `build_bottleneck_labels.py` (기본 `--horizon 60`) | 60분 | sample_csv **7.45%**; 장기 labeled **37.78%** |
-| `data_labeling.ipynb` §7 | **120분** | 노트북 출력 **37.88%** (538,904행 기준) |
+#### Lookahead H
 
-**차이 이유:** H가 길수록 미래 혼잡·DOWN이 반영되어 positive가 증가한다. 스냅 주기 60분일 때 H=120은 **+2 스텝** lookahead이다.  
-**권장:** 운영·Agent Trigger와 맞추려면 **하나의 H로 통일**하고, 스크립트·노트북·문서에 동일 값을 명시한다.
+| 출처 | H | positive rate |
+|------|---|---------------|
+| `build_bottleneck_labels.py` (기본 60) | 60분 | sample **7.45%**; 구 `tg_bottleneck_labeled.csv` **37.78%** |
+| **`data_labeling.ipynb` §6 (현행)** | **120분** | **28.12%** (553,744행) |
 
-#### 노트북 추가: 분위수 라벨 `y_bottleneck_pct` (§6)
+**권장:** Agent horizon(120분)과 **노트북 H=120** 통일. 스크립트 재생성 시 `--horizon 120` + Q_MAX 반영 필요.
 
-- EDA 분위수로 upper/lower tail flag → OR 결합
-- 노트북 예시 positive rate **~50.97%** (전체 `wide` 기준 분위 — **train만 ref** 쓰지 않으면 누수 위험)
-- REPORT 규칙 라벨과 **별도 실험용**; 최종 PoC는 `y_bottleneck` + XGBoost §8이 SSOT
+### 4.4 Feature engineering (§7 · §7-1)
 
-### 4.4 EDA (`data_labeling.ipynb` §5)
+#### §7 — Delta `Δ(t − 120)`
 
-`EDA_COLS`: `q_time_min`, `wait_ratio`, `wip`, `available_tool_ratio`, `utilization_avg`, `max_util`, `max_avg_q_time`
+| 종류 | 컬럼 | 설명 |
+|------|------|------|
+| **Level @ t** | `q_time_min`, `wait_ratio`, `wip`, `available_tool_ratio`, `utilization_avg`, `max_util` | TG instant + tool max (**원시 단위**로 delta 계산) |
+| **Delta @ t** | `{kpi}_delta_120` × 5 | `q_time_min`, `wait_ratio`, `wip`, `max_util`, `max_avg_q_time` |
+| **제외 (level)** | `max_avg_q_time`, `setup_ratio_avg` | 고상관·상수; delta만 사용 |
+| **제외 (중간)** | `*_future`, `*_lag120` | 라벨·lag |
+| **제외 (키)** | `snapshot_time`, `run_id`, `y_bottleneck` | 메타 |
 
-- 분포: log1p 히스토그램 (0 많고 꼬리 긴 변수)
-- `wait_ratio`: 가용 1대·대기 다수 시 **10 이상** 가능 → 병목 신호이나 ML에서는 scale cap/log 검토
-- **hot-spot:** TG `utilization_avg`는 낮은데 `max_util`은 높음 → TG 평균만으로는 unit 쏠림을 놓침 → Tool max 집계가 라벨·feature에 포함되는 이유
+**순서:** 원시 KPI → lag merge → **delta = cur − lag** → (다음 §7-1 scaling).  
+delta를 scaling **이후**에 만들지 않음 (물리 단위 2h 변화 의미 유지).
 
-### 4.5 모델 학습 (`data_labeling.ipynb` §8)
+#### §7-1 — TG별 Min-Max scaling (0~1)
+
+| 항목 | 내용 |
+|------|------|
+| **목적** | TG마다 WIP·`q_time_min` 절대 규모가 다름 → **“이 TG 평소 대비”** 상대화 |
+| **대상** | `KPI_COLS` + `DELTA_FEATURE_COLS` (13컬럼) |
+| **미적용** | `*_future`, `*_lag120`, `y_bottleneck`, `toolgroup` |
+| **fit** | §8과 동일 **시간 train 70%** 구간, **TG × feature** 별 `min`/`max` |
+| **transform** | `wide_train` 전체 (val/test 포함) |
+| **상수 구간** | `min == max` → `0.5`, 이후 `[0,1]` clip |
+| **토글** | `USE_TG_MINMAX_SCALE` |
+
+**전역 min-max vs TG별:** 교과서적 MinMax는 보통 전역 1쌍/feture. Fab 패널에서는 **within-TG** 정규화가 “WIP=2의 TG별 의미 차이”에 더 적합. `wait_ratio`는 이미 비율 축으로 **보완** 관계.
+
+**통계 테이블:** `tg_minmax_stats` (행 = toolgroup × feature, `vmin`, `vmax`, `n_train`).
+
+#### §8 — 모델 입력 피처 (권장 PoC)
+
+| 종류 | 컬럼 | 비고 |
+|------|------|------|
+| **Level + Delta** | §7-1 scaling 후 11컬럼 | `USE_LEVEL_FEATURES` / `USE_DELTA_FEATURES` |
+| **TG ID** | `toolgroup_enc` | **`USE_TOOLGROUP_ENC=False` 권장** (§7-1 후) |
+| **식별** | `toolgroup` (문자열) | **X에 미포함**, 예측·SHAP·Agent 출력용으로 **항상 유지** |
+
+§8 토글: `USE_LEVEL_FEATURES`, `USE_DELTA_FEATURES`, `USE_TOOLGROUP_ENC`, `EXCLUDE_FEATURE_COLS`
+
+**권장 feature 수:** level 6 + delta 5 = **11** (enc off)
+
+#### `toolgroup_enc` 제거와 EXCLUDE_NAMES
+
+- `EXCLUDE_NAMES`는 `wide_train` **기존 컬럼**만 필터 → `toolgroup_enc`는 §8에서 **나중에 생성**되므로 `EXCLUDE_NAMES`에 넣어도 **무효**.
+- enc 제거는 **`USE_TOOLGROUP_ENC=False`** + `FEATURE_COLS = num_cols` 로 제어.
+- enc + raw KPI 사용 시 SHAP에서 enc가 50~70%를 차지하는 사례 다수 → scaling 후에도 enc를 두면 **설명 credit이 enc로 몰릴 수 있음**.
+
+### 4.5 EDA 요약 (§5)
+
+- `q_time_min`: ~91% 행이 0 — 정상 (비병목 TG·시점 다수)
+- `q_time_min` ↔ `max_avg_q_time`: r≈**1.0** — hot-spot=TG 평균인 경우 많음 → level `max_avg_q_time` 제외, delta는 유지
+- `wait_ratio`: 10+ 가능 (가용 1대·대기 다수) — 병목 신호; scale cap/log는 후속
+- `setup_ratio_avg`: 상수에 가까워 상관 히트맵·피처에서 제외
+
+### 4.6 모델 학습 (§8 · §8-1)
 
 | 항목 | 설정 |
 |------|------|
-| 알고리즘 | `XGBClassifier`, `objective=binary:logistic` |
-| Feature | numeric KPI ( `_future`, `y_*`, `run_id` 제외) + `LabelEncoder(toolgroup)` → `toolgroup_enc` |
-| Split | stratified **70 / 15 / 15** (test 15% 먼저, 잔여 85%에서 train:val = 70:15) |
-| 불균형 | `scale_pos_weight = n_neg / n_pos` |
-| 하이퍼파라미터 | `n_estimators=500`, `max_depth=8`, `learning_rate=0.06`, `subsample=0.85`, `colsample_bytree=0.85` |
-| 평가 | accuracy, ROC-AUC, confusion matrix, classification report (val / test) |
+| 알고리즘 | `XGBClassifier`, `binary:logistic` |
+| Split | **`temporal_split_by_snapshot_time`** 70/15/15 (동일 t의 106 TG는 같은 fold) |
+| Train / val / test | 387,430 / 82,998 / 83,104 · t: **180→219420** / **219480→266400** / **266460→313440** |
+| 불균형 | `scale_pos_weight = n_neg / n_pos` (train) |
+| 하이퍼파라미터 | `n_estimators` 300~500, `max_depth` 8~10, `lr=0.06`, `subsample=0.85`, `colsample_bytree=0.85` |
+| 임계값 | §8-1 val F1 스윕 → `BEST_THRESHOLD` (예: **0.60**); `_report` 셀은 **0.7** 고정 예시 |
 
-**한계 (향후 과제):**
+#### Test hold-out — 설정별 비교
 
-1. **단일 `run_id`** 장기 run → 행 단위 random split은 **동일 fab 상태의 복제**에 가깝다.
-2. 권장 split: **`run_id` 블록** 또는 **시간 블록** hold-out, 다중 run 수집 후 재학습.
-3. LTL TG(Litho 등)는 별도 플래그 또는 non-LTL만 학습 검토.
+| 설정 | ROC-AUC | Acc @cutoff | P(1) | R(1) | F1(1) | 비고 |
+|------|---------|-------------|------|------|-------|------|
+| delta + **`toolgroup_enc`**, raw KPI | **0.951** | 0.886 @0.8 | 0.861 | **0.738** | 0.795 | SHAP enc 50~70% 다수 |
+| **§7-1 TG scaling**, **enc off** | **0.945** | **0.885 @0.7** | **0.812** | **0.802** | **0.807** | **권장 PoC** · SHAP KPI 다양 |
 
-### 4.6 FabGuard Agent 연결 (설계)
+**권장 설정 confusion @0.7** (`ece173272af7`, test 83,104행):
+
+```text
+[[53486  4641]   TN / FP
+ [ 4958 20019]]   FN / TP
+```
+
+| 클래스 | precision | recall | F1 |
+|--------|-----------|--------|-----|
+| 0 (정상) | 0.915 | 0.920 | 0.918 |
+| 1 (병목) | 0.812 | 0.802 | **0.807** |
+
+**해석:**
+
+- enc 제거 + TG scaling 후에도 **AUC ≈ 0.95**, 병목 F1 **≈ 0.81** 유지 → 예측력과 설명 가능성 **양립 가능(PoC)**.
+- FP·FN 규모 비슷 (~4.6k / ~5.0k) — 한쪽 쏠림 없음; 운영은 `BEST_THRESHOLD`로 미탐·오경보 trade-off 조정.
+- XGBoost는 scaling **필수는 아님**; 본 scaling은 **TG 상대 KPI + SHAP/Agent 문장화** 목적이 큼.
+
+**한계·후속:**
+
+1. 단일 `run_id` — 다중 run 검증
+2. `THR_REF_DF=train` 분위·`LabelEncoder` train-only (enc 사용 시)
+3. 시점별 SHAP 샘플: test **첫 시각** 10건만 보면 “TG별” 차이 위주 — **시간 10개 × proba 1위 TG** 샘플링 권장
+4. 시점 단위 Top-K hit rate 지표 추가
+
+### 4.7 배치 스크립트 vs 노트북
+
+| | `build_bottleneck_labels.py` | `data_labeling.ipynb` |
+|--|-------------------------------|------------------------|
+| 출력 | `tg_bottleneck_labeled.csv` | in-memory `wide_train` |
+| H 기본 | 60 | **120** |
+| Q_MAX | 미분리 (Q 공용) | **Q_MAX 독립** |
+| Delta | 없음 | **§7** |
+| Split | 없음 | **§8 temporal** |
+
+PoC SSOT는 **노트북**. CSV 재생성 시 스크립트를 노트북과 **동기화**할 것.
+
+### 4.9 SHAP — 병목 예측 근거 (§9, XAI)
+
+**배경 (제조7팀 요구):** “병목 가능성 있음”만이 아니라 **대기시간 증가·작업량 집중·가동률 저하·WIP 불균형** 등 **판단 근거** 제시.
+
+| 항목 | 내용 |
+|------|------|
+| 방법 | `shap.TreeExplainer` + train background subsample |
+| 대상 | test에서 `proba ≥ BEST_THRESHOLD` 인 예측 (기본 **시간순 상위 10건**) |
+| 출력 | 건별 Top-K SHAP 피처, `share_abs_pct`, REPORT **4축** 한글 (`혼잡`/`가용`/`가동`/`큐`/`TG`) |
+| 해석 | SHAP **+** → 해당 피처가 **병목(양성) log-odds** 방향 기여 |
+
+**권장 설정(enc off + §7-1)에서의 관찰:**
+
+- 건마다 **top KPI 조합이 상이** (`wip`, `max_util`, `q_time_min`, `available_tool_ratio`, delta 등) → **TG·상황별 다른 근거** 서술 가능.
+- Agent 문장은 **scaled 값**이므로 “**해당 TG train 구간 대비** WIP·가동이 높음” 형태가 정확.
+- **전후 공정 WIP 불균형**은 TG KPI만으로 부족 → `kpi_process`·공정 그래프·Rule 축은 **별도 레이어** (제조7팀 `propagation_risk` 등).
+
+**LIME:** local 설명 가능하나 PoC에서는 **SHAP 우선** (트리 모델·안정성).
+
+**의존:** `pip install shap` (FAB_BEAR simulation venv).
+
+### 4.10 FabGuard Agent — Dual Trigger · Tier (설계)
+
+```mermaid
+flowchart TB
+  subgraph t_now ["시각 t"]
+    KPI_t["KPI @ t\n(원시 → Rule)"]
+    KPI_s["KPI @ t\n(TG-scaled → ML input)"]
+    RULE["Rule @ t\nREPORT §7.2 on 현재 KPI"]
+    ML["ML @ t\nP(y=1 @ t+120)"]
+  end
+  subgraph t_future ["시각 t+120"]
+    Y["y_bottleneck oracle\n(학습 라벨)"]
+  end
+  KPI_t --> RULE
+  KPI_s --> ML
+  Y -.->|학습| ML
+  RULE --> TIER["Tier 0/1/2"]
+  ML --> TIER
+  TIER --> AGENT["Agent 문장\nRule 축 + SHAP KPI"]
+  TIER --> WI["WHAT-IF / FORWARD"]
+```
+
+| Tier | 조건 (개념) | 의미 |
+|------|-------------|------|
+| **0** | ML만 (proba 높음, Rule 미충족) | **Watch** — 2h 후 병목 **조기 경보** |
+| **1** | Rule만 @ t | **Alert** — **현재** REPORT 병목 축 충족 |
+| **2** | ML + Rule | **High confidence** → WHAT-IF·에스컬레이션 후보 |
+
+**Rule 심각도 (제안, 미구현):** 4조건 축별 점수 `s1~s4` → **조화평균** `rule_score` (OR trigger보다 보수적 등급).  
+**제조7팀 `workload_rate` / `severity_score` / `propagation_risk`:** 별도 Process Agent·`kpi_process` 레이어 (본 ML 노트북 범위 밖).
+
+#### Agent 연결 시퀀스
 
 ```mermaid
 sequenceDiagram
   participant ML as ML ranker
+  participant SHAP as SHAP explainer
   participant TR as Trigger
   participant DB as PostgreSQL
   participant SIM as run_sim_forward_once
 
-  ML->>TR: Top-K TG + action proposal
+  ML->>SHAP: Top alarm rows
+  SHAP->>TR: TG + proba + KPI reasons
   TR->>DB: mes_scenario VALIDATED
   SIM->>DB: mes_scenario_run DONE
   SIM->>SIM: CSV 7종 + kpi_whatif_diff
 ```
 
-- ML: TG별 위험 확률 → Top-K
-- Trigger: `VALIDATED` 승격 후 FORWARD run ([TRIGGER_CONTRACT.md](./TRIGGER_CONTRACT.md))
-- UI tier: 확률 **calibration 후** cutoff (라벨 임계값과 동일하지 않음)
+- ML: TG별 P(y=1 @ t+120) → Top-K
+- SHAP: **KPI·delta 축** 근거 (enc off 권장)
+- Rule @ t: 4조건 **어느 축이 걸렸는지** (결정론적 문장)
+- Trigger: [TRIGGER_CONTRACT.md](./TRIGGER_CONTRACT.md)
+- UI cutoff: 라벨 임계값·`BEST_THRESHOLD`·tier cutoff는 **별도 calibration**
 
 ---
 
@@ -460,21 +621,32 @@ cd FAB_BEAR/simulation
 ### 7.2 검증 체크리스트
 
 - [x] CSV 7종 + KPI 4파일 역할 구분
-- [x] 장기 run `run_id=3e11c2ef42da` 실측 행 수·용량
-- [x] sample_csv 라벨 H=60 재현 (7.45%)
-- [x] ML grain = Tool Group
-- [x] H=60 vs H=120·단일 run split 한계 명시
-- [ ] 신규 2000분 run (Postgres 기동 후 보완 권장)
+- [x] 노트북 SSOT run `ece173272af7`, wide 553,956행
+- [x] REPORT 라벨 H=120, Q_MAX 분리, 분위 임계 (§6)
+- [x] Delta feature §7 (`*_delta_120` 5종)
+- [x] **§7-1 TG별 min-max** (train 70% fit, `tg_minmax_stats`)
+- [x] 시간 블록 split 70/15/15 (§8)
+- [x] **권장 설정:** enc off + scaling — Test ROC-AUC **0.945**, F1(1) **0.807** @0.7
+- [x] §9 SHAP + 4축 한글 매핑 (제조7팀 근거 제시 PoC)
+- [x] §8-1 `BEST_THRESHOLD` val 스윕
+- [ ] `build_bottleneck_labels.py` ↔ 노트북 (H=120, Q_MAX) 동기화
+- [ ] `THR_REF_DF=train` 분위 재학습 (누수 제거)
+- [ ] Rule @ t + Tier 0/1/2 코드화 (`fab_env` / Agent stub)
+- [ ] SHAP 샘플: **시점 N개 × TG 1건** (첫 시각 10건 편향 제거)
+- [ ] enc on/off · scaling on/off **ablation 표** 고정
+- [ ] 다중 run / 시점 Top-K 평가
 
 ### 7.3 참조 문서
 
 | 문서 | 경로 |
 |------|------|
+| KPI·라벨 설계 | [REPORT_SIMULATION_KPI.md](./REPORT_SIMULATION_KPI.md) §7 |
+| ML 종합 (본 문서) | [REPORT_SIMULATION_ML_FULL.md](./REPORT_SIMULATION_ML_FULL.md) |
+| **노트북 SSOT** | `simulation/ML/data_labeling.ipynb` |
 | KPI 4종 | [KPI_CSV_4FILES.md](./KPI_CSV_4FILES.md) |
 | CSV↔DB | [CSV_DB_MAPPING.md](./CSV_DB_MAPPING.md) |
-| KPI·장기 run 상세 | [REPORT_SIMULATION_KPI.md](./REPORT_SIMULATION_KPI.md) |
 | FORWARD 엔진 | [FORWARD_WHATIF_ENGINE.md](./FORWARD_WHATIF_ENGINE.md) |
-| 보고서 작성 프롬프트 | [PROMPT_SIMULATION_ML_REPORT.md](./PROMPT_SIMULATION_ML_REPORT.md) |
+| E2E WHAT-IF | `simulation/e2e_reports/E2E_T26820_STRONG_20260530.md` |
 | Docker | [README_DOCKER.md](./README_DOCKER.md) |
 
 ### 7.4 용어
@@ -485,7 +657,10 @@ cd FAB_BEAR/simulation
 | long / wide | KPI당 1행 vs scope당 1행(컬럼=KPI) |
 | RTF | 납기 준수율 `on_time / due_due` |
 | weak label | 규칙 oracle; 인간 라벨 아님 |
+| TG min-max (§7-1) | toolgroup × feature 별 train min/max → 0~1 |
+| `USE_TOOLGROUP_ENC` | False 시 `FEATURE_COLS`에 enc 미포함 (TG는 `toolgroup` 컬럼으로 식별) |
+| SHAP (§9) | 행별 피처 기여 — Agent KPI 근거 문장 |
 
 ---
 
-*본 문서는 [PROMPT_SIMULATION_ML_REPORT.md](./PROMPT_SIMULATION_ML_REPORT.md) 지침에 따라 작성되었으며, 시뮬 재실행은 Postgres 가동 후 §2.2 명령으로 보완할 수 있다.*
+*본 문서는 [PROMPT_SIMULATION_ML_REPORT.md](./PROMPT_SIMULATION_ML_REPORT.md) 지침을 기반으로 하며, **2026-06-01** 기준 `data_labeling.ipynb` (**§6 REPORT · §7 delta · §7-1 TG min-max · §8 XGBoost enc off · §8-1 threshold · §9 SHAP**) 및 Agent dual-trigger 설계를 반영한다.*

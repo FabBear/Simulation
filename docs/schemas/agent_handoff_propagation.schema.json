@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agent_handoff_propagation",
+  "type": "object",
+  "required": ["version", "pipeline", "target_agent", "propagation"],
+  "properties": {
+    "version": { "type": "string" },
+    "pipeline": { "const": "propagation" },
+    "target_agent": { "const": "bottleneck_propagation" },
+    "propagation": {
+      "type": "object",
+      "required": [
+        "anchor_tg",
+        "candidates",
+        "summary_csv",
+        "candidates_csv",
+        "candidate_rule",
+        "significance_alpha",
+        "independence_test",
+        "independence_alpha",
+        "lb_lags",
+        "n_diff_baseline",
+        "n_runs_forward",
+        "kpis",
+        "multipletest"
+      ],
+      "properties": {
+        "candidate_rule": { "const": "ttest_propagation" },
+        "significance_alpha": { "type": "number" },
+        "independence_test": { "const": "ljung_box" },
+        "independence_alpha": { "type": "number" },
+        "lb_lags": { "type": "integer" },
+        "n_diff_baseline": { "type": "integer" },
+        "n_runs_forward": { "type": "integer" },
+        "kpis": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "multipletest": {
+          "enum": ["fdr_bh", "bonferroni", "none"]
+        },
+        "min_sig_kpis": { "type": "integer" },
+        "candidates": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "summary_csv": { "type": "string" },
+        "candidates_csv": { "type": "string" },
+        "baseline_csv_dir": { "type": "string" },
+        "runs_manifest": { "type": "string" },
+        "anchor_tg": { "type": "string" }
+      }
+    }
+  }
+}

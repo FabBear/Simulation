@@ -8,4 +8,6 @@ openpyxl
 simpy
 gymnasium
 stable-baselines3
+scipy
+statsmodels
 pytest

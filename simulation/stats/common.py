@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+import numpy as np
 import pandas as pd
 
 from build_bottleneck_labels import (
@@ -403,9 +405,36 @@ def load_baseline_manifest_for_reuse(
     return ok[:n_runs]
 
 
+def json_scalar_for_handoff(val: Any) -> Any:
+    if val is None:
+        return None
+    if isinstance(val, (float, np.floating)):
+        f = float(val)
+        return None if math.isnan(f) or math.isinf(f) else f
+    if isinstance(val, (np.integer, int)) and not isinstance(val, bool):
+        return int(val)
+    if isinstance(val, (np.bool_, bool)):
+        return bool(val)
+    if isinstance(val, str) and val.strip() == "":
+        return None
+    return val
+
+
+def dataframe_records_for_handoff(df: pd.DataFrame, columns: list[str]) -> list[dict]:
+    """DataFrame rows as JSON-serializable records for Agent handoff."""
+    if df.empty:
+        return []
+    sub = df[columns].copy()
+    records = sub.to_dict(orient="records")
+    return [{k: json_scalar_for_handoff(v) for k, v in rec.items()} for rec in records]
+
+
 def write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
 
 
 def iso_now() -> str:

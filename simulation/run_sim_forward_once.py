@@ -81,6 +81,12 @@ def main() -> int:
         default=os.environ.get("PPO_MODEL_PATH", ""),
         help="Path to PPO .zip (required with --rl unless PPO_MODEL_PATH is set).",
     )
+    p.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="RNG seed for FabEnv.reset(seed=). Default: 0 if omitted.",
+    )
     args = p.parse_args()
 
     meta = _resolve_scenario_or_exit(args.scenario_id)
@@ -112,10 +118,12 @@ def main() -> int:
         print(f"Description  : {meta['description']}")
     print(f"CSV dir      : {csv_dir}")
     print(f"DISPATCH_MODE: {os.environ.get('DISPATCH_MODE', 'rule')}")
+    seed = 0 if args.seed is None else int(args.seed)
+    print(f"seed         : {seed}")
     print("=" * 64)
 
     env = FabEnv()
-    obs, _ = env.reset(options={"scenario_id": args.scenario_id})
+    obs, _ = env.reset(seed=seed, options={"scenario_id": args.scenario_id})
 
     model = None
     if args.rl:

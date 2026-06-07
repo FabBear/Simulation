@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agent_handoff_whatif",
+  "type": "object",
+  "required": ["version", "pipeline", "target_agent", "whatif"],
+  "properties": {
+    "version": { "type": "string" },
+    "pipeline": { "const": "whatif" },
+    "target_agent": { "const": "whatif_verification" },
+    "whatif": {
+      "type": "object",
+      "required": ["baseline_scenario_id", "whatif_scenario_id", "paired_n", "summary_csv"]
+    }
+  }
+}

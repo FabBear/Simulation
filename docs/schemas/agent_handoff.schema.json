@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agent_handoff_merged",
+  "type": "object",
+  "required": ["version", "t0_sim_minute", "horizon_minutes"],
+  "properties": {
+    "version": { "type": "string" },
+    "g_star_analysis": { "type": ["object", "null"] },
+    "whatif": { "type": ["object", "null"] }
+  }
+}

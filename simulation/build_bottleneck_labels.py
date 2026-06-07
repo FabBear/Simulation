@@ -16,7 +16,7 @@ Label rule (weak oracle, see docs/REPORT_SIMULATION_KPI.md §7.2):
     (q_time_min >= Q AND (wait_ratio >= W OR wip >= N))
     OR available_tool_ratio <= A
     OR (max_util >= U_hi AND utilization_avg < U_lo)
-    OR (max_avg_q_time >= Q AND wait_ratio >= W)
+    OR (max_avg_q_time >= Q AND wait_ratio < W)
 """
 
 from __future__ import annotations
@@ -175,7 +175,7 @@ def assign_bottleneck_labels(
     tg_congestion = (q >= q_thr) & ((w >= w_thr) | (wip >= wip_thr))
     low_avail = avail <= avail_thr
     hot_spot_util = (max_util >= u_hi) & (util_avg < u_lo)
-    hot_spot_queue = (max_q >= q_thr) & (w >= w_thr)
+    hot_spot_queue = (max_q >= q_thr) & (w < w_thr)
 
     return (tg_congestion | low_avail | hot_spot_util | hot_spot_queue).astype(int)
 

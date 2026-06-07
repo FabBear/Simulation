@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agent_handoff_g_star_analysis",
+  "type": "object",
+  "required": ["version", "pipeline", "target_agent", "g_star_analysis"],
+  "properties": {
+    "version": { "type": "string" },
+    "pipeline": { "const": "g_star_analysis" },
+    "target_agent": { "const": "root_cause" },
+    "g_star_toolgroups": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "g_star_analysis": {
+      "type": "object",
+      "required": [
+        "anchor_tg",
+        "analysis_rule",
+        "g_star_toolgroups",
+        "summary_csv",
+        "evidence_csv",
+        "significance_alpha",
+        "independence_test",
+        "fdr_scope",
+        "kpis",
+        "multipletest"
+      ],
+      "properties": {
+        "analysis_rule": { "const": "ttest_g_star_analysis" },
+        "significance_alpha": { "type": "number" },
+        "independence_test": { "const": "ljung_box" },
+        "independence_alpha": { "type": "number" },
+        "lb_lags": { "type": "integer" },
+        "n_diff_baseline": { "type": "integer" },
+        "n_runs_forward": { "type": "integer" },
+        "fdr_scope": { "const": "g_star_x_kpi" },
+        "fdr_n_hypotheses": { "type": "integer" },
+        "kpis": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "multipletest": {
+          "enum": ["fdr_bh", "bonferroni", "none"]
+        },
+        "g_star_toolgroups": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "summary_csv": { "type": "string" },
+        "evidence_csv": { "type": "string" },
+        "baseline_csv_dir": { "type": "string" },
+        "runs_manifest": { "type": "string" },
+        "anchor_tg": { "type": "string" }
+      }
+    }
+  }
+}

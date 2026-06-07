@@ -8,7 +8,13 @@ from typing import Optional
 
 import pandas as pd
 
-from stats.common import PairedRunMeta, snapshot_targets, ttest_1samp, ttest_rel
+from stats.common import (
+    PairedRunMeta,
+    dataframe_records_for_handoff,
+    snapshot_targets,
+    ttest_1samp,
+    ttest_rel,
+)
 from tools.compare_whatif import compare_dirs
 
 _PRIMARY_KPIS = frozenset({
@@ -121,31 +127,18 @@ def run_whatif_paired_analysis(
     return pd.DataFrame(rows)
 
 
-def highlights_from_summary(
-    summary: pd.DataFrame,
-    *,
-    focus_scopes: Optional[list[str]] = None,
-    max_rows: int = 20,
-) -> list[dict]:
-    df = summary.copy()
-    if focus_scopes:
-        df = df[df["scope"].isin(focus_scopes)]
-    if df.empty:
-        return []
-    df = df.sort_values(by="mean_delta", key=lambda s: s.abs())
-    out = []
-    for _, row in df.head(max_rows).iterrows():
-        ci_lo = row.get("ci_lo", "")
-        ci_hi = row.get("ci_hi", "")
-        out.append({
-            "scope": row["scope"],
-            "kpi_name": row["kpi_name"],
-            "mean_delta": float(row["mean_delta"]),
-            "ci_95": [float(ci_lo), float(ci_hi)] if ci_lo != "" else [],
-            "paired_t_p": float(row["paired_t_p"]) if row.get("paired_t_p") != "" else None,
-            "verdict": row["verdict"],
-        })
-    return out
+_WHATIF_PAIRED_COLUMNS = [
+    "level",
+    "scope",
+    "kpi_name",
+    "paired_n",
+    "mean_delta",
+    "ci_lo",
+    "ci_hi",
+    "paired_t_p",
+    "verdict",
+    "nonzero_delta",
+]
 
 
 def write_whatif_outputs(
@@ -161,15 +154,13 @@ def write_whatif_outputs(
 ) -> dict:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / "whatif_paired_summary.csv"
-    summary.to_csv(path, index=False)
-    hl = highlights_from_summary(summary, focus_scopes=cfg.focus_scopes)
+    summary.to_csv(out_dir / "whatif_paired_summary.csv", index=False)
+    paired_cols = [c for c in _WHATIF_PAIRED_COLUMNS if c in summary.columns]
     return {
         "baseline_scenario_id": baseline_scenario_id,
         "whatif_scenario_id": whatif_scenario_id,
         "paired_n": paired_n,
-        "highlights": hl,
-        "summary_csv": path.name,
+        "whatif_paired_results": dataframe_records_for_handoff(summary, paired_cols),
         "paired_manifest": paired_manifest_name,
         "baseline_reused_from": baseline_manifest_name,
         "level": cfg.level,

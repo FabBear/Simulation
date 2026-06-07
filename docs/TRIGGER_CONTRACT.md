@@ -128,4 +128,128 @@ decision §6).
 * Triggers MUST NOT skip the `DRAFT → VALIDATED` step; that is the single
   audit hook.
 * Triggers MUST NOT mutate `mes_scenario` rows in `RUNNING` state. If a fix
-  is needed, wait for `DONE` (or insert a new scenario with new id).
+  is needed, wait for `DONE` (or insert a new scenario with new scenario_id).
+
+---
+
+## Appendix — Monte Carlo replicas (Template → N× DB clone)
+
+PoC default **N=30**. Same payload, different `scenario_id` per run (`_R01..R30`).
+
+| Actor | Responsibility |
+|---|---|
+| **AI Agent** | Submit **one** template scenario (actions, T0, horizon). |
+| **Platform Trigger** | `load_mes_scenario` → `clone_mes_scenarios_for_monte_carlo` → `run_monte_carlo_batch` / `run_stat_batch`. |
+| **Agent (must not)** | Create `_R01..R30` manually or copy 30 CSV folders. |
+
+**Why N replicas:** `mes_scenario.status` allows one `VALIDATED→RUNNING→DONE` cycle per
+`scenario_id`. Parallel Monte Carlo requires **N distinct scenario_ids** with identical
+snapshot/action rows.
+
+**Tools:**
+
+- `tools/clone_mes_scenarios_for_monte_carlo.py` — copy template + child rows → replicas (`DRAFT`)
+- `tools/run_monte_carlo_batch.py` — clone + stat batch wrapper
+- `tools/run_stat_batch.py` — promote unique IDs, parallel sim, handoff JSON (`monte_carlo` block)
+
+**Track B (what-if):** baseline `runs_manifest.csv` is **reused** from Track A; only what-if
+replicas are cloned and simulated N times.
+
+**Agent submit (example):**
+
+```json
+{
+  "baseline_scenario_id": "FWD_BASE_T26820",
+  "t0_sim_minute": 26820,
+  "horizon_minutes": 120,
+  "actions": [{ "action_kind": "LOT_HOLD", "effective_time": 26821 }],
+  "monte_carlo": { "n_runs": 30 }
+}
+```
+
+**Platform returns:**
+
+```json
+{
+  "template_scenario_id": "FWD_WHATIF_T26820_RANK1",
+  "replica_scenario_ids": ["..._R01", "..._R30"],
+  "handoff_path": "out/.../agent_handoff_whatif.json"
+}
+```
+
+---
+
+## Appendix — E2E Trigger entry points (snapshot → handoff JSON)
+
+PoC **single-command** wrappers chain snapshot/bundle → DB load → Monte Carlo → Agent handoff.
+Agent logic is **not** implemented here; these tools only produce `agent_handoff_*.json`.
+
+| Track | Tool | Output handoff |
+|-------|------|----------------|
+| **A — FORWARD / root cause** | `tools/trigger_forward_pipeline.py` | `agent_handoff_g_star_analysis.json` |
+| **B — WHAT-IF / verification** | `tools/trigger_whatif_pipeline.py` | `agent_handoff_whatif.json` |
+
+Shared helpers: `tools/_trigger_common.py` (`run_step`, `bundle_csv_paths`, `emit_result_json`).
+
+### Track A example
+
+```bash
+cd FAB_BEAR/simulation
+python tools/trigger_forward_pipeline.py \
+  --sim-csv-dir sim_csv_out/cold_start \
+  --run-id <cold_start_run_id> \
+  --t0 26820 --horizon 120 \
+  --scenario-id FWD_BASE_T26820 \
+  --g-star-file out/ml_g_star_e2e/g_star.json \
+  --baseline-csv-dir sim_csv_out \
+  --n-runs 30 --parallel 8 \
+  --out-dir out/forward_trigger_T26820
+```
+
+Steps (subprocess chain): `build_forward_scenario_from_csv.py` → `load_mes_scenario.py` → `run_monte_carlo_batch.py --track g_star_analysis`.
+
+Success stdout (final line block):
+
+```json
+{
+  "track": "g_star_analysis",
+  "template_scenario_id": "FWD_BASE_T26820",
+  "replica_scenario_ids": ["FWD_BASE_T26820_R01", "..."],
+  "handoff_path": "out/forward_trigger_T26820/agent_handoff_g_star_analysis.json",
+  "runs_manifest": "out/forward_trigger_T26820/runs_manifest.csv"
+}
+```
+
+Flags: `--dry-run` (print commands only), `--skip-snapshot`, `--skip-load` (reuse prior bundle/DB row).
+
+### Track B example
+
+```bash
+python tools/trigger_whatif_pipeline.py \
+  --baseline-scenario-id FWD_BASE_T26820 \
+  --baseline-bundle-dir scenario_out/FWD_BASE_T26820 \
+  --reuse-baseline-manifest out/forward_trigger_T26820/runs_manifest.csv \
+  --whatif-scenario-id FWD_WHATIF_T26820_RANK1 \
+  --whatif-actions agent_actions/rank1_actions.csv \
+  --t0 26820 --horizon 120 \
+  --focus-scopes "Diffusion_FE_120#1" \
+  --n-runs 30 --parallel 8 \
+  --out-dir out/whatif_trigger_rank1
+```
+
+Steps: `make_whatif_scenario_bundle.py` → `load_mes_scenario.py` → `run_monte_carlo_batch.py --track whatif` (baseline manifest **reused**, baseline sim not re-run).
+
+Success stdout:
+
+```json
+{
+  "track": "whatif",
+  "template_scenario_id": "FWD_WHATIF_T26820_RANK1",
+  "baseline_scenario_id": "FWD_BASE_T26820",
+  "replica_scenario_ids": ["..."],
+  "handoff_path": "out/whatif_trigger_rank1/agent_handoff_whatif.json",
+  "paired_manifest": "out/whatif_trigger_rank1/paired_manifest.csv"
+}
+```
+
+Fail-fast: missing baseline manifest or fewer than `n_runs` ok rows → exit 1 before handoff.

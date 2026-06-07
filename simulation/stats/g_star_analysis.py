@@ -10,7 +10,7 @@ import pandas as pd
 
 import csv as _csv
 
-from stats.common import RunMeta, read_kpi_toolgroup_wide
+from stats.common import RunMeta, dataframe_records_for_handoff, read_kpi_toolgroup_wide
 
 try:
     from scipy.stats import ttest_ind
@@ -387,8 +387,6 @@ def write_g_star_analysis_outputs(
 
     evidence_df = summary[summary["in_g_star"] == 1].copy()
     evidence_cols = [c for c in _EVIDENCE_COLUMNS if c in evidence_df.columns]
-    evidence_path = out_dir / "g_star_kpi_evidence.csv"
-    evidence_df[evidence_cols].to_csv(evidence_path, index=False)
 
     g_star_sorted = sorted(g_star)
     fdr_n = int(
@@ -409,8 +407,7 @@ def write_g_star_analysis_outputs(
         "kpis": list(cfg.kpis),
         "multipletest": cfg.multipletest,
         "g_star_toolgroups": g_star_sorted,
-        "summary_csv": summary_path.name,
-        "evidence_csv": evidence_path.name,
+        "g_star_kpi_evidence": dataframe_records_for_handoff(evidence_df, evidence_cols),
         "baseline_csv_dir": baseline_csv_dir,
         "runs_manifest": runs_manifest_name,
     }

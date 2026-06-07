@@ -7,6 +7,16 @@
     "version": { "type": "string" },
     "pipeline": { "const": "g_star_analysis" },
     "target_agent": { "const": "root_cause" },
+    "monte_carlo": {
+      "type": "object",
+      "properties": {
+        "n_runs": { "type": "integer" },
+        "template_scenario_id": { "type": ["string", "null"] },
+        "suffix_pattern": { "type": ["string", "null"] },
+        "execution_mode": { "enum": ["parallel", "serial"] },
+        "clone_manifest": { "type": ["string", "null"] }
+      }
+    },
     "g_star_toolgroups": {
       "type": "array",
       "items": { "type": "string" }
@@ -17,8 +27,7 @@
         "anchor_tg",
         "analysis_rule",
         "g_star_toolgroups",
-        "summary_csv",
-        "evidence_csv",
+        "g_star_kpi_evidence",
         "significance_alpha",
         "independence_test",
         "fdr_scope",
@@ -46,8 +55,33 @@
           "type": "array",
           "items": { "type": "string" }
         },
-        "summary_csv": { "type": "string" },
-        "evidence_csv": { "type": "string" },
+        "g_star_kpi_evidence": {
+          "type": "array",
+          "description": "Primary Agent input: G* x KPI Welch t-test + Ljung-Box + FDR evidence rows.",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["toolgroup", "kpi", "status"],
+            "properties": {
+              "toolgroup": { "type": "string" },
+              "kpi": { "type": "string" },
+              "direction": { "type": "string" },
+              "n_base": { "type": ["integer", "null"] },
+              "n_fwd": { "type": ["integer", "null"] },
+              "mean_base": { "type": ["number", "null"] },
+              "mean_fwd": { "type": ["number", "null"] },
+              "delta_mean": { "type": ["number", "null"] },
+              "lb_pvalue": { "type": ["number", "null"] },
+              "lb_independent": { "type": ["integer", "null"] },
+              "t_stat": { "type": ["number", "null"] },
+              "t_p": { "type": ["number", "null"] },
+              "t_p_adj": { "type": ["number", "null"] },
+              "kpi_significant": { "type": ["integer", "null"] },
+              "status": { "type": "string" },
+              "anchor_tg": { "type": "string" }
+            }
+          }
+        },
         "baseline_csv_dir": { "type": "string" },
         "runs_manifest": { "type": "string" },
         "anchor_tg": { "type": "string" }

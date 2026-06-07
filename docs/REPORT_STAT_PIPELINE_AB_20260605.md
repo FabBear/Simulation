@@ -4,7 +4,7 @@
 **대상:** FabGuard PoC (FAB_BEAR/simulation)  
 **검증 조건:** T0 = 26820 sim minute, Horizon H = 120분, N = 30
 
-> **개정 이력:** 초판은 Track A를 **병목 확산(propagation)** 으로 기술했다. PoC 타겟 변경에 따라 Track A는 **G\* KPI 원인 분석(`g_star_analysis` / `root_cause` Agent)** 으로 재정의·구현되었다. 본 개정판이 현행 SSOT이다.
+> **개정 이력:** 초판은 Track A를 **병목 확산(propagation)** 으로 기술했다. PoC 타겟 변경에 따라 Track A는 **G\* KPI 원인 분석(`g_star_analysis` / `root_cause` Agent)** 으로 재정의·구현되었다. **2026-06-05c:** §9.7–9.9 git merge 기준 구현 파일 전체 SSOT 추가. 본 개정판이 현행 SSOT이다.
 
 ---
 
@@ -119,6 +119,8 @@ flowchart TB
 | `min_sig_kpis` 후보 필터 | **없음** |
 
 ### 4.2 구현 파일
+
+> **전체 목록·역할·git 상태:** §9.7.1–9.7.4, §9.8.
 
 | 파일 | 역할 |
 |------|------|
@@ -292,11 +294,13 @@ D_i = whatif_value_i − baseline_value_i     (i = 1..N)
 
 ### 5.2 구현 파일
 
+> **전체 목록·역할·git 상태:** §9.7.2–9.7.4, §9.8.
+
 | 파일 | 역할 |
 |------|------|
 | `simulation/stats/whatif_effect.py` | paired 통계 |
 | `simulation/tools/stat_whatif_paired_report.py` | B CLI |
-| `simulation/tools/compare_whatif.py` | KPI @ T0+H compare |
+| `simulation/tools/compare_whatif.py` | KPI @ T0+H compare (기존) |
 | `simulation/tools/run_stat_batch.py` | `--mode whatif` |
 | `docs/schemas/agent_handoff_whatif.schema.json` | handoff 스키마 |
 
@@ -313,6 +317,7 @@ D_i = whatif_value_i − baseline_value_i     (i = 1..N)
 **산출 디렉터리:** `simulation/out/ml_whatif_e2e/`
 
 ```bash
+# sim 전 mes_scenario → VALIDATED 자동 promote (2026-06-07 패치; --skip-promote 로 비활성 가능)
 python tools/run_stat_batch.py \
   --mode whatif \
   --reuse-baseline-manifest out/ml_propagation_e2e/runs_manifest.csv \
@@ -395,6 +400,9 @@ cd FAB_BEAR/simulation
 | 통합 handoff | `agent_handoff.json` E2E |
 | B 전체 TG×KPI | focus scope 없이 paired summary |
 | anchor_tg | CLI `--anchor-tg` 미지정 시 sorted(G\*)[0] 기본값 — 운영 시 ML anchor 명시 권장 |
+| `run_stat_batch` promote + fail-fast | **완료** (2026-06-07, `PROMPT_PATCH_RUN_STAT_BATCH_PROMOTE.md`) |
+| MC replica clone + wrapper | **완료** (2026-06-07, `PROMPT_IMPLEMENT_MONTE_CARLO_SCENARIO_REPLICAS.md`) — `clone_mes_scenarios_for_monte_carlo.py`, `run_monte_carlo_batch.py`, batch parallel guard |
+| 보고서 §9.7–9.9 | **완료** — git merge 기준 구현 파일·폐기 매핑 SSOT |
 
 ---
 
@@ -415,7 +423,10 @@ cd FAB_BEAR/simulation
 
 - `docs/schemas/agent_handoff_g_star_analysis.schema.json`  
 - `docs/schemas/agent_handoff_whatif.schema.json`  
-- `docs/schemas/agent_handoff.schema.json` (병합용, `g_star_analysis` 키)
+- `docs/schemas/agent_handoff.schema.json` (병합용, `g_star_analysis` 키)  
+- `docs/schemas/agent_handoff_propagation.schema.json` (레거시; §9.7.3)
+
+**구현 파일 전체 SSOT:** §9.7 · **폐기·대체:** §9.8 · **git 미포함:** §9.9
 
 ### 9.3 KPI 참고: `utilization_avg`
 
@@ -434,7 +445,10 @@ DE_BE_66, DefMEt_FE_118, Dielectric_FE_30, EPI_38, TF_Met_FE_61
 | `docs/PROMPT_REFACTOR_PROPAGATION_TO_G_STAR_ANALYSIS.md` | **A 현행 설계 SSOT** |
 | `docs/PROMPT_REPLACE_BINOM_WITH_TTEST_PROPAGATION.md` | [DEPRECATED] 확산 시대 |
 | `docs/PROMPT_IMPLEMENT_STAT_PIPELINE_AB.md` | A/B 초기 설계 |
+| `docs/PROMPT_PATCH_L2_DEFAULT_PROPAGATION.md` | L2 기본값 패치 (역사적) |
+| `docs/STAT_PIPELINE_AB.md` | A/B 운영·설계 문서 |
 | `docs/PROMPT_WRITE_REPORT_STAT_PIPELINE_AB_20260605.md` | 보고서 작성 프롬프트 (초판) |
+| **§9.7–9.9 (본 보고서)** | **git merge 구현 파일·폐기 매핑 SSOT** |
 
 ### 9.6 버전 정보
 
@@ -443,9 +457,160 @@ DE_BE_66, DefMEt_FE_118, Dielectric_FE_30, EPI_38, TF_Met_FE_61
 | 보고서 개정 | 2026-06-05 (g_star_analysis) |
 | A handoff `generated_at` | 2026-06-05T08:54:20Z |
 | B handoff `generated_at` | 2026-06-05T07:50:55Z |
+| git PR | `Statistic_Test_Pip` → `main` (PR #3, merge commit `4305fbe`) |
+| stat pipeline 커밋 | `9f1619d` — 27 files (+5176 / −3 lines) |
 
 > 수치 SSOT: `out/ml_g_star_e2e/`, `out/ml_whatif_e2e/`. FORWARD run은 `out/ml_propagation_e2e/runs/` 재사용.
 
+### 9.7 구현 파일 전체 목록 (git merge 기준)
+
+본 절은 **`main` merge에 포함된 Stat Pipeline A/B 구현 파일**의 SSOT이다. §4.2·§5.2는 Track별 핵심만 요약하고, **전체·보조 파일은 본 절**을 따른다.
+
+**범위:** 커밋 `9f1619d` (`Add g_star_analysis and what-if stat pipeline (Pipeline A/B)`)  
+**제외:** E2E 런타임 산출물(`simulation/out/`), `data_labeling.ipynb`(merge 시 `main` 버전 유지)
+
+#### 9.7.1 Pipeline A — G\* KPI 원인 분석 (`root_cause`)
+
+| 파일 | git | 역할 |
+|------|-----|------|
+| `simulation/stats/g_star_analysis.py` | A | **Track A 핵심.** G\* TG만 Welch t-test + Ljung-Box + BH-FDR. non-G\*는 `not_in_g_star` 참고 행. `g_star_analysis_summary.csv`, `g_star_kpi_evidence.csv` 생성 |
+| `simulation/tools/stat_g_star_analysis_report.py` | A | **Track A CLI.** runs manifest + G\* JSON + cold-start CSV → 통계 실행 → `agent_handoff_g_star_analysis.json` |
+| `simulation/tools/run_ml_g_star_e2e.sh` | A | **Track A E2E.** ML G\* @ T0 → FORWARD N회 → `stat_g_star_analysis_report.py` → handoff 검증 (5단계) |
+| `simulation/tools/ml_g_star_at_t0.py` | A | **Upstream ML.** cold-start CSV에서 T0 G\* 산출 (`g_star_T*.json`, audit CSV, SHAP). Track A의 G\* 정의 |
+| `simulation/tests/test_stats_g_star_analysis_smoke.py` | A | G\* only 검정, FDR 범위, evidence 전행, handoff에 `candidates` 없음 등 smoke (7 tests) |
+| `docs/schemas/agent_handoff_g_star_analysis.schema.json` | A | `agent_handoff_g_star_analysis.json` JSON Schema (`pipeline=g_star_analysis`, `target_agent=root_cause`) |
+
+**Track A 런타임 산출물 (git 미포함):**
+
+| 산출물 | 설명 |
+|--------|------|
+| `g_star_analysis_summary.csv` | 전체 TG×KPI 감사용 (E2E 530행) |
+| `g_star_kpi_evidence.csv` | Agent 주 입력 — G\*×KPI 전행 (E2E 25행, 유의 무관) |
+| `agent_handoff_g_star_analysis.json` | `root_cause` Agent handoff |
+| `g_star_T26820.json` | ML G\* @ T0 |
+| `runs_manifest.csv` | FORWARD N회 manifest (B baseline 재사용) |
+
+#### 9.7.2 Pipeline B — 대응안 효과 검증 (`whatif_verification`)
+
+| 파일 | git | 역할 |
+|------|-----|------|
+| `simulation/stats/whatif_effect.py` | A | **Track B 핵심.** seed-matched baseline vs what-if **paired t-test** (L3). `whatif_paired_summary.csv` + handoff block |
+| `simulation/tools/stat_whatif_paired_report.py` | A | **Track B CLI.** `paired_manifest.csv` → paired 통계 → `agent_handoff_whatif.json` |
+| `simulation/tests/test_stats_whatif_paired_smoke.py` | A | paired mean delta 부호·verdict smoke (1 test) |
+| `docs/schemas/agent_handoff_whatif.schema.json` | A | `agent_handoff_whatif.json` JSON Schema |
+
+**Track B 런타임 산출물 (git 미포함):**
+
+| 산출물 | 설명 |
+|--------|------|
+| `paired_manifest.csv` | baseline↔what-if run 쌍 목록 |
+| `whatif_paired_summary.csv` | scope×KPI별 paired 통계 |
+| `agent_handoff_whatif.json` | `whatif_verification` Agent handoff |
+
+**기존 코드 (신규 아님, B에서 사용):** `simulation/tools/compare_whatif.py` — KPI @ T0+H baseline vs what-if diff (`compare_dirs()`).
+
+#### 9.7.3 A/B 공통 · 오케스트레이션
+
+| 파일 | git | 역할 |
+|------|-----|------|
+| `simulation/stats/__init__.py` | A | `stats` 패키지 초기화 |
+| `simulation/stats/common.py` | A | **공통 기반.** `RunMeta`/`PairedRunMeta`, manifest I/O, baseline KPI 캐시, G\* load, `merge_handoff()` (A+B 통합 handoff) |
+| `simulation/tools/run_stat_batch.py` | A | **배치 오케스트레이터.** `--mode g_star_analysis` / `whatif` / `both`. sim 전 **promote** + N회 시뮬 + stat + handoff JSON (`--skip-promote` optional). MC: single-ID parallel guard, `--template-scenario-id`, handoff `monte_carlo` |
+| `simulation/tools/clone_mes_scenarios_for_monte_carlo.py` | A | Template → N× `mes_scenario` DB replica (동일 payload, `_R01..R30`) |
+| `simulation/tools/run_monte_carlo_batch.py` | A | clone + `run_stat_batch` 한 진입점 (what-if / g_star_analysis) |
+| `simulation/tests/test_clone_mes_scenarios_smoke.py` | A | suffix expansion, dry-run, parallel guard, wrapper wiring |
+| `simulation/tests/test_run_stat_batch_promote_smoke.py` | A | promote + fail-fast smoke |
+| `simulation/tests/test_stats_common.py` | A | manifest, G\* load, handoff merge 등 common 유틸 테스트 |
+| `simulation/tests/test_build_paired_manifest.py` | A | baseline manifest → paired manifest 조립 테스트 |
+| `docs/schemas/agent_handoff.schema.json` | A | A+B **통합 handoff** top-level schema (`g_star_analysis` + `whatif` 키) |
+| `docs/schemas/agent_handoff_propagation.schema.json` | A | 구 propagation handoff schema (**레거시 참고용**; 현행 A는 `agent_handoff_g_star_analysis.schema.json`) |
+
+#### 9.7.4 시뮬·인프라 수정 (A/B 지원)
+
+| 파일 | git | 역할 |
+|------|-----|------|
+| `simulation/run_sim_forward_once.py` | M | FORWARD 1회 CLI. **`--seed` 추가** → N회 Monte Carlo 재현성 (A/B N=30) |
+| `simulation/tests/test_run_sim_seed_arg.py` | A | `--seed` 인자 smoke test |
+| `simulation/build_bottleneck_labels.py` | M | 병목 라벨·KPI 집계 (stat pipeline baseline/forward KPI 읽기 연동) |
+| `simulation/requirements.txt` | M | `scipy` 등 stat pipeline **의존성 추가** |
+
+#### 9.7.5 설계·프롬프트·운영 문서
+
+| 파일 | git | 역할 |
+|------|-----|------|
+| `docs/PROMPT_IMPLEMENT_STAT_PIPELINE_AB.md` | A | **초기 설계 SSOT.** Pipeline A/B 전체 구현 프롬프트 |
+| `docs/PROMPT_REFACTOR_PROPAGATION_TO_G_STAR_ANALYSIS.md` | A | **A 재정의 SSOT.** propagation → g_star_analysis / root_cause |
+| `docs/PROMPT_REPLACE_BINOM_WITH_TTEST_PROPAGATION.md` | A | binom L2 → Welch t-test 전환 (확산 시대; **deprecated** 맥락) |
+| `docs/PROMPT_PATCH_L2_DEFAULT_PROPAGATION.md` | A | L2 기본값 패치 (역사적) |
+| `docs/STAT_PIPELINE_AB.md` | A | 파이프라인 A/B 운영·설계 문서 |
+| `docs/REPORT_STAT_PIPELINE_AB_20260605.md` | A | 본 보고서 — N=30 E2E 검증 SSOT |
+
+#### 9.7.6 파일 → 파이프라인 매핑 (요약)
+
+```mermaid
+flowchart LR
+  subgraph upstream [Upstream]
+    ML[ml_g_star_at_t0.py]
+    FWD[run_sim_forward_once.py]
+    BL[build_bottleneck_labels.py]
+  end
+
+  subgraph trackA [Track A]
+    GA[g_star_analysis.py]
+    SA[stat_g_star_analysis_report.py]
+    EA[run_ml_g_star_e2e.sh]
+  end
+
+  subgraph trackB [Track B]
+    WE[whatif_effect.py]
+    SB[stat_whatif_paired_report.py]
+    CW[compare_whatif.py]
+  end
+
+  subgraph shared [Shared]
+    CM[common.py]
+    RB[run_stat_batch.py]
+  end
+
+  ML --> GA
+  FWD --> GA
+  BL --> GA
+  CM --> GA
+  CM --> WE
+  SA --> GA
+  EA --> SA
+  RB --> GA
+  RB --> WE
+  SB --> WE
+  CW --> WE
+  FWD --> WE
+```
+
+### 9.8 폐기·대체 파일 매핑
+
+Track A를 propagation → g_star_analysis로 전환하면서 **아래 파일은 main에 포함되지 않았으며**, 신규 파일로 대체되었다.
+
+| 폐기 (미포함) | 대체 (main 포함) |
+|---------------|------------------|
+| `stats/propagation.py` | `stats/g_star_analysis.py` |
+| `tools/stat_propagation_report.py` | `tools/stat_g_star_analysis_report.py` |
+| `tools/run_ml_propagation_e2e.sh` | `tools/run_ml_g_star_e2e.sh` |
+| `tests/test_stats_propagation_smoke.py` | `tests/test_stats_g_star_analysis_smoke.py` |
+| `propagation_summary.csv` | `g_star_analysis_summary.csv` |
+| `propagation_candidates.csv` | `g_star_kpi_evidence.csv` (의미 변경: 유의 필터 없음) |
+| `agent_handoff_propagation.json` | `agent_handoff_g_star_analysis.json` |
+| `--mode propagation` | `--mode g_star_analysis` |
+| `target_agent: bottleneck_propagation` | `target_agent: root_cause` |
+
+### 9.9 git에 포함되지 않은 항목
+
+| 항목 | 사유 |
+|------|------|
+| `simulation/out/` (~231MB) | E2E CSV/JSON 런타임 산출물; `.gitignore` 대상 권장 |
+| `simulation/scenario_out/`, `e2e_reports/` | 로컬 시나리오·리포트 |
+| `simulation/ML/data_labeling.ipynb` | Stat Pipeline과 무관; PR merge 시 **`main` 버전 유지** |
+| `agent_handoff.json` (통합) | 선택 산출물; §8.2 미완 |
+
 ---
 
-*보고서 버전: 2026-06-05b · FabGuard PoC · A=g_star_analysis/root_cause · B=paired L3 · N=30 @ T0=26820*
+*보고서 버전: 2026-06-05c · FabGuard PoC · A=g_star_analysis/root_cause · B=paired L3 · N=30 @ T0=26820 · §9.7–9.9 git 파일 SSOT 추가*

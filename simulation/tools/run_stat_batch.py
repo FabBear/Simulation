@@ -33,14 +33,113 @@ from stats.g_star_analysis import (
 from stats.whatif_effect import WhatifEffectConfig, run_whatif_paired_analysis, write_whatif_outputs
 
 _RUNNER = _ROOT / "run_sim_forward_once.py"
+_PROMOTER = Path(__file__).resolve().parent / "promote_scenario_validated.py"
 _STAT_A = Path(__file__).resolve().parent / "stat_g_star_analysis_report.py"
 _STAT_B = Path(__file__).resolve().parent / "stat_whatif_paired_report.py"
 
 
-def _scenario_id(pattern: str, run_index: int, fallback: str) -> str:
+def _scenario_id(
+    pattern: str,
+    run_index: int,
+    fallback: str,
+    *,
+    template: str = "",
+) -> str:
     if "{" in pattern:
-        return pattern.format(run=run_index, run_index=run_index)
+        tpl = template or fallback
+        return pattern.format(
+            run=run_index,
+            run_index=run_index,
+            source=tpl,
+            template=tpl,
+        )
     return fallback
+
+
+def _scenario_ids_for_batch(
+    pattern: str,
+    fallback: str,
+    indices,
+    *,
+    template: str = "",
+) -> list[str]:
+    if not pattern:
+        return [fallback] if fallback else []
+    out: list[str] = []
+    seen: set[str] = set()
+    for i in indices:
+        sid = _scenario_id(pattern, i, fallback, template=template)
+        if sid not in seen:
+            seen.add(sid)
+            out.append(sid)
+    return out
+
+
+def _effective_parallel(args: argparse.Namespace, scenario_ids: list[str]) -> int:
+    if len(scenario_ids) == 1 and args.parallel > 1:
+        print(
+            f"WARN single scenario_id {scenario_ids[0]!r}: "
+            f"forcing parallel=1 (use suffix-pattern for MC parallel)",
+            file=sys.stderr,
+        )
+        return 1
+    return args.parallel
+
+
+def _monte_carlo_block(
+    args: argparse.Namespace,
+    *,
+    effective_parallel: int,
+    clone_manifest: str | None = None,
+) -> dict | None:
+    template = (getattr(args, "template_scenario_id", None) or "").strip()
+    pattern = (
+        args.whatif_suffix_pattern
+        or args.scenario_suffix_pattern
+        or ""
+    ).strip()
+    if not template and not pattern and not clone_manifest:
+        return None
+    return {
+        "n_runs": args.n_runs,
+        "template_scenario_id": template or None,
+        "suffix_pattern": pattern or None,
+        "execution_mode": "parallel" if effective_parallel > 1 else "serial",
+        "clone_manifest": clone_manifest,
+    }
+
+
+def _promote_scenario(python: str, scenario_id: str, *, dry_run: bool) -> int:
+    cmd = [python, str(_PROMOTER), "--scenario-id", scenario_id]
+    if dry_run:
+        print("[dry-run promote]", " ".join(cmd))
+        return 0
+    proc = subprocess.run(cmd, cwd=str(_ROOT), capture_output=True, text=True)
+    if proc.returncode != 0:
+        print(proc.stderr or proc.stdout, file=sys.stderr)
+    else:
+        out = (proc.stdout or "").strip()
+        if out:
+            print(out)
+    return proc.returncode
+
+
+def _promote_before_batch(args: argparse.Namespace, scenario_ids: list[str]) -> None:
+    if args.skip_promote or not scenario_ids:
+        return
+    for sid in scenario_ids:
+        code = _promote_scenario(args.python, sid, dry_run=args.dry_run)
+        if code != 0 and not args.dry_run:
+            print(f"X promote failed: {sid}", file=sys.stderr)
+            raise SystemExit(1)
+
+
+def _failed_runs(runs: list[RunMeta]) -> list[RunMeta]:
+    return [r for r in runs if (r.status or "") != "ok"]
+
+
+def _failed_whatif_rows(rows: list[dict]) -> list[dict]:
+    return [r for r in rows if (r.get("status") or "") != "ok"]
 
 
 def _run_one_sim(
@@ -94,11 +193,30 @@ def _run_baseline_batch(
 
     pattern = args.scenario_suffix_pattern or ""
     fallback = args.baseline_scenario_id
+    template = (getattr(args, "template_scenario_id", None) or fallback or "").strip()
+    sids = _scenario_ids_for_batch(
+        pattern, fallback, range(1, args.n_runs + 1), template=template,
+    )
+    multi_id = len(sids) > 1
+    if multi_id:
+        _promote_before_batch(args, sids)
+    parallel = _effective_parallel(args, sids)
     runs: list[RunMeta] = []
 
     def job(i: int) -> RunMeta:
         seed = i
-        sid = _scenario_id(pattern, i, fallback) if pattern else fallback
+        sid = _scenario_id(pattern, i, fallback, template=template) if pattern else fallback
+        if not multi_id and not args.skip_promote:
+            code = _promote_scenario(args.python, sid, dry_run=args.dry_run)
+            if code != 0 and not args.dry_run:
+                return RunMeta(
+                    run_index=i,
+                    seed=seed,
+                    csv_dir=out_dir / "runs" / f"run_{i:02d}",
+                    run_id="",
+                    scenario_id=sid,
+                    status="failed",
+                )
         run_dir = out_dir / "runs" / f"run_{i:02d}"
         code, run_id, sid_used = _run_one_sim(
             scenario_id=sid,
@@ -122,7 +240,7 @@ def _run_baseline_batch(
         for i in range(1, args.n_runs + 1):
             runs.append(job(i))
     else:
-        with ThreadPoolExecutor(max_workers=args.parallel) as ex:
+        with ThreadPoolExecutor(max_workers=parallel) as ex:
             futs = {ex.submit(job, i): i for i in range(1, args.n_runs + 1)}
             for fut in as_completed(futs):
                 runs.append(fut.result())
@@ -139,7 +257,7 @@ def _run_whatif_batch(
     baselines: list[RunMeta],
     *,
     skip_if_exists: bool,
-) -> list[PairedRunMeta]:
+) -> tuple[list[PairedRunMeta], list[dict]]:
     paired_path = out_dir / "paired_manifest.csv"
     if skip_if_exists and paired_path.is_file():
         from stats.common import list_paired_runs
@@ -147,15 +265,37 @@ def _run_whatif_batch(
         ok = [p for p in pairs if p.whatif_csv_dir.is_dir()]
         if len(ok) >= args.n_runs:
             print(f"Skip whatif sim: {paired_path} has {len(ok)} rows")
-            return ok[: args.n_runs]
+            return ok[: args.n_runs], []
 
     pattern = args.whatif_suffix_pattern or ""
     fallback = args.whatif_scenario_id
+    template = (getattr(args, "template_scenario_id", None) or fallback or "").strip()
+    sids = _scenario_ids_for_batch(
+        pattern,
+        fallback,
+        [b.run_index for b in baselines],
+        template=template,
+    )
+    multi_id = len(sids) > 1
+    if multi_id:
+        _promote_before_batch(args, sids)
+    parallel = _effective_parallel(args, sids)
     whatif_rows: list[dict] = []
 
     def job(base: RunMeta) -> dict:
         i = base.run_index
-        sid = _scenario_id(pattern, i, fallback) if pattern else fallback
+        sid = _scenario_id(pattern, i, fallback, template=template) if pattern else fallback
+        if not multi_id and not args.skip_promote:
+            code = _promote_scenario(args.python, sid, dry_run=args.dry_run)
+            if code != 0 and not args.dry_run:
+                return {
+                    "run_index": i,
+                    "seed": base.seed,
+                    "csv_dir": str(out_dir / "whatif_runs" / f"run_{i:02d}"),
+                    "run_id": "",
+                    "scenario_id": sid,
+                    "status": "failed",
+                }
         run_dir = out_dir / "whatif_runs" / f"run_{i:02d}"
         code, run_id, sid_used = _run_one_sim(
             scenario_id=sid,
@@ -177,7 +317,7 @@ def _run_whatif_batch(
     if args.dry_run:
         whatif_rows = [job(b) for b in baselines]
     else:
-        with ThreadPoolExecutor(max_workers=args.parallel) as ex:
+        with ThreadPoolExecutor(max_workers=parallel) as ex:
             futs = [ex.submit(job, b) for b in baselines]
             whatif_rows = [f.result() for f in as_completed(futs)]
         whatif_rows.sort(key=lambda r: int(r["run_index"]))
@@ -188,7 +328,7 @@ def _run_whatif_batch(
     )
     if not args.dry_run:
         write_paired_manifest(paired_path, pairs)
-    return pairs
+    return pairs, whatif_rows
 
 
 def _g_star_analysis_handoff(args, out_dir: Path, runs: list[RunMeta]) -> dict:
@@ -287,7 +427,22 @@ def main() -> int:
     p.add_argument("--kpi-names", default="")
     p.add_argument("--level", choices=("L1", "L2", "L3"), default="L3")
     p.add_argument("--skip-sim-if-manifest-exists", action="store_true")
+    p.add_argument(
+        "--skip-promote",
+        action="store_true",
+        help="Skip promote_scenario_validated (advanced; sim fails if status!=VALIDATED)",
+    )
     p.add_argument("--write-combined-handoff", action="store_true")
+    p.add_argument(
+        "--template-scenario-id",
+        default="",
+        help="MC template scenario_id for handoff monte_carlo metadata",
+    )
+    p.add_argument(
+        "--clone-manifest",
+        default="",
+        help="Path to clone_manifest.json (handoff monte_carlo.clone_manifest)",
+    )
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 
@@ -309,6 +464,7 @@ def main() -> int:
     gsa_block = None
     whatif_block = None
     g_star_list: list[str] | None = None
+    mc_effective_parallel = args.parallel
 
     runs: list[RunMeta] = []
     pairs: list[PairedRunMeta] = []
@@ -325,8 +481,28 @@ def main() -> int:
         )
         if args.dry_run:
             return 0
+        failed = _failed_runs(runs)
+        if failed:
+            print(
+                f"X baseline sim: {len(failed)}/{len(runs)} failed — skipping stat handoff",
+                file=sys.stderr,
+            )
+            return 1
         gsa_block = _g_star_analysis_handoff(args, out_dir, runs)
         g_star_list = sorted(load_g_star(args.g_star_file))
+        pattern = args.scenario_suffix_pattern or ""
+        baseline_sids = _scenario_ids_for_batch(
+            pattern,
+            args.baseline_scenario_id,
+            range(1, args.n_runs + 1),
+            template=(args.template_scenario_id or args.baseline_scenario_id or "").strip(),
+        )
+        mc_effective_parallel = _effective_parallel(args, baseline_sids)
+        mc_block = _monte_carlo_block(
+            args,
+            effective_parallel=mc_effective_parallel,
+            clone_manifest=args.clone_manifest or None,
+        )
         payload_a = {
             "version": "1.0",
             "pipeline": "g_star_analysis",
@@ -343,9 +519,12 @@ def main() -> int:
                 "G* = ML alarm at T0 predicting bottleneck at T0+horizon.",
                 "Analysis pool = G* only; non-G* rows in summary are status=not_in_g_star (reference).",
                 "Handoff includes ALL G* x KPI evidence (t_p_adj, delta_mean) regardless of kpi_significant.",
+                "Primary Agent input: g_star_analysis.g_star_kpi_evidence (inline JSON stat rows).",
                 "p-values BH-FDR corrected within G* x KPI only.",
             ],
         }
+        if mc_block:
+            payload_a["monte_carlo"] = mc_block
         write_json(out_dir / "agent_handoff_g_star_analysis.json", payload_a)
 
     if mode in ("whatif", "both"):
@@ -367,13 +546,33 @@ def main() -> int:
                     out_dir / "runs_manifest.csv", args.n_runs,
                 )
 
-        pairs = _run_whatif_batch(
+        pairs, whatif_rows = _run_whatif_batch(
             args, out_dir, baselines,
             skip_if_exists=args.skip_sim_if_manifest_exists,
         )
         if args.dry_run:
             return 0
+        failed_w = _failed_whatif_rows(whatif_rows)
+        if failed_w:
+            print(
+                f"X whatif sim: {len(failed_w)}/{len(whatif_rows)} failed — skipping stat handoff",
+                file=sys.stderr,
+            )
+            return 1
         whatif_block = _whatif_handoff(args, out_dir, pairs)
+        wf_pattern = args.whatif_suffix_pattern or ""
+        whatif_sids = _scenario_ids_for_batch(
+            wf_pattern,
+            args.whatif_scenario_id,
+            range(1, args.n_runs + 1),
+            template=(args.template_scenario_id or args.whatif_scenario_id or "").strip(),
+        )
+        mc_effective_parallel = _effective_parallel(args, whatif_sids)
+        mc_block = _monte_carlo_block(
+            args,
+            effective_parallel=mc_effective_parallel,
+            clone_manifest=args.clone_manifest or None,
+        )
         payload_b = {
             "version": "1.0",
             "pipeline": "whatif",
@@ -391,9 +590,12 @@ def main() -> int:
             "whatif": whatif_block,
             "agent_notes": [
                 "Paired t on D_i = whatif_i - baseline_i; same seed as runs_manifest.",
+                "Primary Agent input: whatif.whatif_paired_results (inline JSON stat rows).",
                 "Does not consume g_star_kpi_evidence.",
             ],
         }
+        if mc_block:
+            payload_b["monte_carlo"] = mc_block
         write_json(out_dir / "agent_handoff_whatif.json", payload_b)
 
     if args.write_combined_handoff or (mode == "both" and not args.dry_run):

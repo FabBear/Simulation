@@ -2,9 +2,9 @@
 -- Split kpi_snapshot (level column) into four level-specific tables matching CSV outputs.
 -- Provides read-only kpi_snapshot VIEW for legacy queries.
 
-DROP VIEW IF EXISTS kpi_snapshot;
-
 DROP TABLE IF EXISTS kpi_snapshot CASCADE;
+
+DROP VIEW IF EXISTS kpi_snapshot;
 
 CREATE TABLE IF NOT EXISTS kpi_fab (
     id              SERIAL PRIMARY KEY,

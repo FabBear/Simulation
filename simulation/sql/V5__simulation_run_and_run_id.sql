@@ -17,5 +17,4 @@ CREATE INDEX IF NOT EXISTS ix_lot_event_log_run_id ON lot_event_log (run_id);
 ALTER TABLE tool_state_log ADD COLUMN IF NOT EXISTS run_id VARCHAR;
 CREATE INDEX IF NOT EXISTS ix_tool_state_log_run_id ON tool_state_log (run_id);
 
-ALTER TABLE kpi_snapshot ADD COLUMN IF NOT EXISTS run_id VARCHAR;
-CREATE INDEX IF NOT EXISTS ix_kpi_snapshot_run_id ON kpi_snapshot (run_id);
+-- KPI run_id: V6 level tables (kpi_fab/process/toolgroup/tool), not legacy kpi_snapshot.

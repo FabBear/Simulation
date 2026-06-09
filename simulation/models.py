@@ -330,15 +330,14 @@ class RealtimeWipSummary(Base):
 
 # -----------------------------------------------------------
 # [설계도 12] KPI 스냅샷 — level별 4 테이블 (CSV 1:1; V6 migration)
-# Legacy `kpi_snapshot` table replaced by kpi_fab/process/toolgroup/tool.
-# Read-only UNION view `kpi_snapshot` is provided in V6 SQL for compatibility.
+# Legacy `kpi_snapshot` table replaced by kpi_fab/process/toolgroup/tool (V6).
 # -----------------------------------------------------------
 class KpiLevelBase(Base):
     __abstract__ = True
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     run_id = Column(String, index=True, nullable=True)
-    snapshot_time = Column(Float, index=True)          # sim minute
+    snapshot_time = Column(Float)                      # ix_*_snapshot_time in subclass __table_args__
     scope = Column(String, index=True)                 # "*" | process_name | toolgroup_name | tool_id
     kpi_name = Column(String, index=True)              # rtf, throughput_24h, tat_min, ...
     value = Column(Float)                              # weighted sum or ratio

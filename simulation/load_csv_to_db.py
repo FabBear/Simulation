@@ -23,6 +23,8 @@ from csv_db_mapping import (  # noqa: E402
     OPTIONAL_CSV_FILES,
     map_csv_row,
 )
+from sqlalchemy.exc import ProgrammingError  # noqa: E402
+
 from database import SessionLocal, engine  # noqa: E402
 from models import (  # noqa: E402
     KpiFab,
@@ -56,14 +58,35 @@ _SCHEMA_SQL = (
 )
 
 
+def _sql_without_line_comments(stmt: str) -> str:
+    """Drop `--` lines so comment-only chunks are not sent to PostgreSQL."""
+    kept = [line for line in stmt.splitlines() if not line.strip().startswith("--")]
+    return "\n".join(kept).strip()
+
+
+def _drop_legacy_kpi_snapshot(conn) -> None:
+    """Remove pre-V6 kpi_snapshot TABLE or compatibility VIEW (wrong-type DROP is OK)."""
+    for ddl in (
+        "DROP VIEW IF EXISTS kpi_snapshot CASCADE",
+        "DROP TABLE IF EXISTS kpi_snapshot CASCADE",
+    ):
+        try:
+            conn.execute(text(ddl))
+        except ProgrammingError as exc:
+            if getattr(exc.orig, "pgcode", None) != "42809":  # WrongObjectType
+                raise
+
+
 def _apply_schema_sql() -> None:
     for name in _SCHEMA_SQL:
         sql_path = _ROOT / "sql" / name
         if not sql_path.is_file():
             raise FileNotFoundError(f"Missing migration SQL: {sql_path}")
         with engine.begin() as conn:
+            if name == "V6__kpi_level_tables.sql":
+                _drop_legacy_kpi_snapshot(conn)
             for stmt in sql_path.read_text(encoding="utf-8").split(";"):
-                s = stmt.strip()
+                s = _sql_without_line_comments(stmt)
                 if s:
                     conn.execute(text(s))
 

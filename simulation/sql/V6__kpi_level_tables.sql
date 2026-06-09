@@ -1,10 +1,6 @@
 -- V6__kpi_level_tables.sql
--- Split kpi_snapshot (level column) into four level-specific tables matching CSV outputs.
--- Provides read-only kpi_snapshot VIEW for legacy queries.
-
-DROP VIEW IF EXISTS kpi_snapshot;
-
-DROP TABLE IF EXISTS kpi_snapshot CASCADE;
+-- Split legacy kpi_snapshot TABLE into four level-specific tables (CSV 1:1).
+-- Legacy kpi_snapshot (table or view) is dropped in load_csv_to_db._drop_legacy_kpi_snapshot.
 
 CREATE TABLE IF NOT EXISTS kpi_fab (
     id              SERIAL PRIMARY KEY,
@@ -73,20 +69,3 @@ CREATE INDEX IF NOT EXISTS ix_kpi_toolgroup_lookup ON kpi_toolgroup (run_id, sco
 CREATE INDEX IF NOT EXISTS ix_kpi_tool_run_id ON kpi_tool (run_id);
 CREATE INDEX IF NOT EXISTS ix_kpi_tool_snapshot_time ON kpi_tool (snapshot_time);
 CREATE INDEX IF NOT EXISTS ix_kpi_tool_lookup ON kpi_tool (run_id, scope, kpi_name, snapshot_time);
-
-CREATE OR REPLACE VIEW kpi_snapshot AS
-SELECT id, run_id, snapshot_time, 'FAB'::varchar AS level, scope, kpi_name, value,
-       window_minutes, numerator, denominator, meta
-FROM kpi_fab
-UNION ALL
-SELECT id, run_id, snapshot_time, 'PROCESS', scope, kpi_name, value,
-       window_minutes, numerator, denominator, meta
-FROM kpi_process
-UNION ALL
-SELECT id, run_id, snapshot_time, 'TOOLGROUP', scope, kpi_name, value,
-       window_minutes, numerator, denominator, meta
-FROM kpi_toolgroup
-UNION ALL
-SELECT id, run_id, snapshot_time, 'TOOL', scope, kpi_name, value,
-       window_minutes, numerator, denominator, meta
-FROM kpi_tool;

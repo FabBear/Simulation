@@ -12,6 +12,7 @@ if str(_ROOT) not in sys.path:
 
 from tools._trigger_common import (  # noqa: E402
     BUILD_FORWARD,
+    BUILD_FORWARD_DB,
     RUN_MC,
     build_load_mes_cmd,
     default_suffix_pattern,
@@ -21,6 +22,35 @@ from tools._trigger_common import (  # noqa: E402
     validate_bundle_not_empty,
     validate_n_runs,
 )
+
+
+def _build_forward_db_cmd(
+    python: str,
+    *,
+    run_id: str,
+    t0: float,
+    horizon: float,
+    scenario_id: str,
+    description: str,
+    emit_csv_dir: Path | None = None,
+) -> list[str]:
+    cmd = [
+        python,
+        str(BUILD_FORWARD_DB),
+        "--run-id",
+        run_id,
+        "--t0",
+        str(t0),
+        "--horizon",
+        str(horizon),
+        "--scenario-id",
+        scenario_id,
+        "--description",
+        description,
+    ]
+    if emit_csv_dir is not None:
+        cmd.extend(["--emit-csv", str(emit_csv_dir.resolve())])
+    return cmd
 
 
 def _build_forward_cmd(
@@ -115,35 +145,63 @@ def run_forward_pipeline(args: argparse.Namespace) -> int:
     suffix_pattern = (args.suffix_pattern or "").strip() or default_suffix_pattern(template_id)
     description = args.description or "Trigger forward pipeline bundle"
 
+    source = (args.source or "csv").strip().lower()
+    if source not in ("csv", "db"):
+        print("X --source must be csv or db", file=sys.stderr)
+        return 1
+
     if not args.skip_snapshot:
         if not args.run_id:
             print("X --run-id required unless --skip-snapshot", file=sys.stderr)
             return 1
-        sim_csv_dir = args.sim_csv_dir.resolve()
-        rc = run_step(
-            _build_forward_cmd(
-                args.python,
-                sim_csv_dir=sim_csv_dir,
-                run_id=args.run_id,
-                t0=args.t0,
-                horizon=args.horizon,
-                scenario_id=template_id,
-                bundle_dir=bundle_dir,
-                description=description,
-            ),
-            dry_run=args.dry_run,
-        )
-        if rc != 0:
-            return rc
+        if source == "db":
+            emit_csv = bundle_dir if args.emit_bundle_csv else None
+            rc = run_step(
+                _build_forward_db_cmd(
+                    args.python,
+                    run_id=args.run_id,
+                    t0=args.t0,
+                    horizon=args.horizon,
+                    scenario_id=template_id,
+                    description=description,
+                    emit_csv_dir=emit_csv,
+                ),
+                dry_run=args.dry_run,
+            )
+            if rc != 0:
+                return rc
+            if not args.dry_run and args.emit_bundle_csv:
+                validate_bundle_not_empty(bundle_dir)
+        else:
+            if args.sim_csv_dir is None:
+                print("X --sim-csv-dir required for --source csv", file=sys.stderr)
+                return 1
+            sim_csv_dir = args.sim_csv_dir.resolve()
+            rc = run_step(
+                _build_forward_cmd(
+                    args.python,
+                    sim_csv_dir=sim_csv_dir,
+                    run_id=args.run_id,
+                    t0=args.t0,
+                    horizon=args.horizon,
+                    scenario_id=template_id,
+                    bundle_dir=bundle_dir,
+                    description=description,
+                ),
+                dry_run=args.dry_run,
+            )
+            if rc != 0:
+                return rc
+            if not args.dry_run:
+                validate_bundle_not_empty(bundle_dir)
+    elif source == "csv":
+        if not bundle_dir.is_dir():
+            print(f"X bundle dir missing: {bundle_dir} (--skip-snapshot)", file=sys.stderr)
+            return 1
         if not args.dry_run:
             validate_bundle_not_empty(bundle_dir)
-    elif not bundle_dir.is_dir():
-        print(f"X bundle dir missing: {bundle_dir} (--skip-snapshot)", file=sys.stderr)
-        return 1
-    elif not args.dry_run:
-        validate_bundle_not_empty(bundle_dir)
 
-    if not args.skip_load:
+    if not args.skip_load and source == "csv":
         rc = run_step(
             build_load_mes_cmd(
                 args.python,
@@ -198,8 +256,14 @@ def run_forward_pipeline(args: argparse.Namespace) -> int:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Track A: snapshot → load → MC → handoff")
-    p.add_argument("--sim-csv-dir", type=Path, default=None)
+    p.add_argument("--source", choices=("csv", "db"), default="csv", help="T0 snapshot source (default: csv)")
+    p.add_argument("--sim-csv-dir", type=Path, default=None, help="Required for --source csv")
     p.add_argument("--run-id", default="")
+    p.add_argument(
+        "--emit-bundle-csv",
+        action="store_true",
+        help="With --source db, also write debug bundle CSVs under out-dir/bundle",
+    )
     p.add_argument("--t0", type=float, required=True)
     p.add_argument("--horizon", type=float, default=120.0)
     p.add_argument("--scenario-id", required=True, help="FORWARD template scenario_id")
@@ -219,8 +283,8 @@ def main() -> int:
     p.add_argument("--skip-sim-if-manifest-exists", action="store_true")
     args = p.parse_args()
 
-    if not args.skip_snapshot and args.sim_csv_dir is None:
-        print("X --sim-csv-dir required unless --skip-snapshot", file=sys.stderr)
+    if not args.skip_snapshot and args.source == "csv" and args.sim_csv_dir is None:
+        print("X --sim-csv-dir required for --source csv unless --skip-snapshot", file=sys.stderr)
         return 1
 
     return run_forward_pipeline(args)

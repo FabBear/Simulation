@@ -12,6 +12,7 @@ if str(_ROOT) not in sys.path:
 
 from tools._trigger_common import (  # noqa: E402
     MAKE_WHATIF,
+    MAKE_WHATIF_DB,
     RUN_MC,
     build_load_mes_cmd,
     default_suffix_pattern,
@@ -22,6 +23,38 @@ from tools._trigger_common import (  # noqa: E402
     validate_bundle_not_empty,
     validate_n_runs,
 )
+
+
+def _build_whatif_db_cmd(
+    python: str,
+    *,
+    baseline_scenario_id: str,
+    whatif_scenario_id: str,
+    t0: float,
+    horizon: float,
+    whatif_actions: Path,
+    description: str,
+    plan_patch: Path | None = None,
+) -> list[str]:
+    cmd = [
+        python,
+        str(MAKE_WHATIF_DB),
+        "--baseline-scenario-id",
+        baseline_scenario_id,
+        "--whatif-scenario-id",
+        whatif_scenario_id,
+        "--t0",
+        str(t0),
+        "--horizon",
+        str(horizon),
+        "--whatif-actions",
+        str(whatif_actions.resolve()),
+        "--description",
+        description,
+    ]
+    if plan_patch is not None:
+        cmd.extend(["--plan-patch", str(plan_patch.resolve())])
+    return cmd
 
 
 def _build_whatif_bundle_cmd(
@@ -35,8 +68,9 @@ def _build_whatif_bundle_cmd(
     horizon: float,
     whatif_actions: Path,
     description: str,
+    plan_patch: Path | None = None,
 ) -> list[str]:
-    return [
+    cmd = [
         python,
         str(MAKE_WHATIF),
         "--base-dir",
@@ -56,6 +90,9 @@ def _build_whatif_bundle_cmd(
         "--description",
         description,
     ]
+    if plan_patch is not None:
+        cmd.extend(["--plan-patch", str(plan_patch.resolve())])
+    return cmd
 
 
 def _build_mc_cmd(
@@ -120,6 +157,11 @@ def run_whatif_pipeline(args: argparse.Namespace) -> int:
     validate_n_runs(args.n_runs)
     validate_baseline_manifest(args.reuse_baseline_manifest, args.n_runs)
 
+    source = (args.source or "csv").strip().lower()
+    if source not in ("csv", "db"):
+        print("X --source must be csv or db", file=sys.stderr)
+        return 1
+
     out_dir = args.out_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     bundle_dir = out_dir / "bundle"
@@ -132,31 +174,51 @@ def run_whatif_pipeline(args: argparse.Namespace) -> int:
         if not args.whatif_actions:
             print("X --whatif-actions required unless --skip-snapshot", file=sys.stderr)
             return 1
-        rc = run_step(
-            _build_whatif_bundle_cmd(
-                args.python,
-                baseline_bundle_dir=args.baseline_bundle_dir,
-                bundle_dir=bundle_dir,
-                whatif_scenario_id=template_id,
-                baseline_scenario_id=baseline_id,
-                t0=args.t0,
-                horizon=args.horizon,
-                whatif_actions=args.whatif_actions,
-                description=description,
-            ),
-            dry_run=args.dry_run,
-        )
+        if source == "db":
+            rc = run_step(
+                _build_whatif_db_cmd(
+                    args.python,
+                    baseline_scenario_id=baseline_id,
+                    whatif_scenario_id=template_id,
+                    t0=args.t0,
+                    horizon=args.horizon,
+                    whatif_actions=args.whatif_actions,
+                    description=description,
+                    plan_patch=args.plan_patch,
+                ),
+                dry_run=args.dry_run,
+            )
+        else:
+            if args.baseline_bundle_dir is None:
+                print("X --baseline-bundle-dir required for --source csv", file=sys.stderr)
+                return 1
+            rc = run_step(
+                _build_whatif_bundle_cmd(
+                    args.python,
+                    baseline_bundle_dir=args.baseline_bundle_dir,
+                    bundle_dir=bundle_dir,
+                    whatif_scenario_id=template_id,
+                    baseline_scenario_id=baseline_id,
+                    t0=args.t0,
+                    horizon=args.horizon,
+                    whatif_actions=args.whatif_actions,
+                    description=description,
+                    plan_patch=args.plan_patch,
+                ),
+                dry_run=args.dry_run,
+            )
         if rc != 0:
             return rc
+        if not args.dry_run and source == "csv":
+            validate_bundle_not_empty(bundle_dir, require_whatif=True)
+    elif source == "csv":
+        if not bundle_dir.is_dir():
+            print(f"X bundle dir missing: {bundle_dir} (--skip-snapshot)", file=sys.stderr)
+            return 1
         if not args.dry_run:
             validate_bundle_not_empty(bundle_dir, require_whatif=True)
-    elif not bundle_dir.is_dir():
-        print(f"X bundle dir missing: {bundle_dir} (--skip-snapshot)", file=sys.stderr)
-        return 1
-    elif not args.dry_run:
-        validate_bundle_not_empty(bundle_dir, require_whatif=True)
 
-    if not args.skip_load:
+    if not args.skip_load and source == "csv":
         rc = run_step(
             build_load_mes_cmd(
                 args.python,
@@ -216,11 +278,13 @@ def run_whatif_pipeline(args: argparse.Namespace) -> int:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Track B: bundle → load → MC → handoff")
+    p.add_argument("--source", choices=("csv", "db"), default="csv", help="WHATIF snapshot source (default: csv)")
     p.add_argument("--baseline-scenario-id", required=True)
-    p.add_argument("--baseline-bundle-dir", type=Path, required=True)
+    p.add_argument("--baseline-bundle-dir", type=Path, default=None, help="Required for --source csv")
     p.add_argument("--reuse-baseline-manifest", type=Path, required=True)
     p.add_argument("--whatif-scenario-id", required=True)
     p.add_argument("--whatif-actions", type=Path, default=None)
+    p.add_argument("--plan-patch", type=Path, default=None, help="Optional release plan patch CSV/JSON")
     p.add_argument("--t0", type=float, required=True)
     p.add_argument("--horizon", type=float, default=120.0)
     p.add_argument("--focus-scopes", default="")

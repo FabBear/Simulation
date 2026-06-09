@@ -1,0 +1,3 @@
+/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/scipy/stats/_axis_nan_policy.py:592: RuntimeWarning: Precision loss occurred in moment calculation due to catastrophic cancellation. This occurs when the data are nearly identical. Results may be unreliable.
+  res = hypotest_fun_out(*samples, **kwds)
+Done mode=whatif out_dir=/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_whatif_e2e

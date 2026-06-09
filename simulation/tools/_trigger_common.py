@@ -12,7 +12,9 @@ _ROOT = Path(__file__).resolve().parents[1]
 _TOOLS = Path(__file__).resolve().parent
 
 BUILD_FORWARD = _TOOLS / "build_forward_scenario_from_csv.py"
+BUILD_FORWARD_DB = _TOOLS / "build_forward_scenario_from_db.py"
 MAKE_WHATIF = _TOOLS / "make_whatif_scenario_bundle.py"
+MAKE_WHATIF_DB = _TOOLS / "make_whatif_scenario_from_db.py"
 LOAD_MES = _ROOT / "load_mes_scenario.py"
 RUN_MC = _TOOLS / "run_monte_carlo_batch.py"
 _CLONE = _TOOLS / "clone_mes_scenarios_for_monte_carlo.py"

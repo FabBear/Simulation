@@ -1,0 +1,927 @@
+========== Fixed pipeline: INFER=sim_csv_out, T0=26820, N_RUNS=30 ==========
+Pipeline order: cold-start CSV -> ML G* @ T0 -> FORWARD x30 -> L2 propagation
+
+========== [1/5] ML infer G* @ T0 (sim_csv_out, --infer-only) ==========
+Loaded model: /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/ml_model.joblib
+Inference KPI snapshot @ T0: 26820.0 (requested t0=26820.0, predict horizon t0+120)
+  feature rows at T0: 106
+G* (5 TG): ['DE_BE_66', 'DefMEt_FE_118', 'Dielectric_FE_30', 'EPI_38', 'TF_Met_FE_61']
+Anchor: DefMEt_FE_118
+Eligible B (not in G*, not bn@T0): 71 TG
+Wrote /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/g_star_T26820.json
+Wrote /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/ml_alarm_audit_t26820.csv
+/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/shap/explainers/_tree.py:265: FutureWarning: In the future, passing feature_perturbation='interventional' without providing a background dataset will raise an error. Please provide a background dataset to continue using the interventional approach or set feature_perturbation='auto' to automatically switch approaches.
+  warnings.warn(
+Wrote SHAP top features: /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/ml_shap_top_t26820.csv
+
+========== [1/5] ML train + G* @ T0 ==========
+SKIP_ML=1 — reuse /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/g_star_T26820.json
+
+========== [2/5] Audit: G* vs bn@T0 vs eligible B ==========
+audit file: /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/ml_alarm_audit_t26820.csv
+  total TG: 106
+  G* (ML alarm): 5
+  eligible B (not G*, not bn@T0): 71
+  bn@T0 among G*: 3 (anchor often bn@T0)
+
+--- Top 10 G* by proba ---
+       toolgroup    proba  y_pred_alarm  in_g_star  bn_t0_rule  eligible_B  snapshot_time_infer
+   DefMEt_FE_118 0.948411             1          1           1           0              26820.0
+Dielectric_FE_30 0.928073             1          1           0           0              26820.0
+    TF_Met_FE_61 0.881354             1          1           1           0              26820.0
+          EPI_38 0.861622             1          1           0           0              26820.0
+        DE_BE_66 0.724059             1          1           1           0              26820.0
+
+--- Sample eligible B (propagation can test) ---
+ toolgroup    proba  y_pred_alarm  in_g_star  bn_t0_rule  eligible_B  snapshot_time_infer
+   WE_BE_7 0.011026             0          0           0           1              26820.0
+Implant_74 0.050931             0          0           0           1              26820.0
+  WE_BE_17 0.059002             0          0           0           1              26820.0
+  DE_BE_48 0.059002             0          0           0           1              26820.0
+  DE_BE_50 0.059002             0          0           0           1              26820.0
+  DE_BE_69 0.059002             0          0           0           1              26820.0
+  DE_FE_56 0.059002             0          0           0           1              26820.0
+  DE_FE_58 0.059002             0          0           0           1              26820.0
+  DE_FE_62 0.059002             0          0           0           1              26820.0
+  DE_FE_70 0.059002             0          0           0           1              26820.0
+
+========== [3/5] FORWARD baseline x30 (seed 1..N) ==========
+--- run 1 / 30 (seed=1) ---
+Traceback (most recent call last):
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/engine/base.py", line 143, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/engine/base.py", line 3317, in raw_connection
+    return self.pool.connect()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/base.py", line 448, in connect
+    return _ConnectionFairy._checkout(self)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/base.py", line 1272, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/base.py", line 712, in checkout
+    rec = pool._do_get()
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/impl.py", line 177, in _do_get
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/util/langhelpers.py", line 121, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/impl.py", line 175, in _do_get
+    return self._create_connection()
+           ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/base.py", line 389, in _create_connection
+    return _ConnectionRecord(self)
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/base.py", line 674, in __init__
+    self.__connect()
+    ~~~~~~~~~~~~~~^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/base.py", line 900, in __connect
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/util/langhelpers.py", line 121, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/base.py", line 896, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/engine/create.py", line 667, in connect
+    return dialect.connect(*cargs_tup, **cparams)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/engine/default.py", line 630, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+psycopg2.OperationalError: connection to server at "localhost" (::1), port 5433 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "localhost" (127.0.0.1), port 5433 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/tools/promote_scenario_validated.py", line 36, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/tools/promote_scenario_validated.py", line 23, in main
+    sc = db.query(MesScenario).filter(MesScenario.scenario_id == args.scenario_id).first()
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/orm/query.py", line 2766, in first
+    return self.limit(1)._iter().first()  # type: ignore
+           ~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/orm/query.py", line 2864, in _iter
+    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+                                                  ~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+        params,
+        ^^^^^^^
+        execution_options={"_sa_orm_load_options": self.load_options},
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/orm/session.py", line 2351, in execute
+    return self._execute_internal(
+           ~~~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+    ...<4 lines>...
+        _add_event=_add_event,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/orm/session.py", line 2239, in _execute_internal
+    conn = self._connection_for_bind(bind)
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/orm/session.py", line 2108, in _connection_for_bind
+    return trans._connection_for_bind(engine, execution_options)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 2, in _connection_for_bind
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/orm/state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/orm/session.py", line 1187, in _connection_for_bind
+    conn = bind.connect()
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/engine/base.py", line 3293, in connect
+    return self._connection_cls(self)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/engine/base.py", line 145, in __init__
+    Connection._handle_dbapi_exception_noconnection(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        err, dialect, engine
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/engine/base.py", line 2448, in _handle_dbapi_exception_noconnection
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/engine/base.py", line 143, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/engine/base.py", line 3317, in raw_connection
+    return self.pool.connect()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/base.py", line 448, in connect
+    return _ConnectionFairy._checkout(self)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/base.py", line 1272, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/base.py", line 712, in checkout
+    rec = pool._do_get()
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/impl.py", line 177, in _do_get
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/util/langhelpers.py", line 121, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/impl.py", line 175, in _do_get
+    return self._create_connection()
+           ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/base.py", line 389, in _create_connection
+    return _ConnectionRecord(self)
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/base.py", line 674, in __init__
+    self.__connect()
+    ~~~~~~~~~~~~~~^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/base.py", line 900, in __connect
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/util/langhelpers.py", line 121, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/pool/base.py", line 896, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/engine/create.py", line 667, in connect
+    return dialect.connect(*cargs_tup, **cparams)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/sqlalchemy/engine/default.py", line 630, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/.venv/lib/python3.14/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5433 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "localhost" (127.0.0.1), port 5433 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+========== RESUME [3/5]-[5/5] (Docker up, SKIP_ML=1, N_RUNS=30) ==========
+========== [1/5] ML train + G* @ T0 ==========
+SKIP_ML=1 — reuse /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/g_star_T26820.json
+
+========== [2/5] Audit: G* vs bn@T0 vs eligible B ==========
+audit file: /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/ml_alarm_audit_t26820.csv
+  total TG: 106
+  G* (ML alarm): 5
+  eligible B (not G*, not bn@T0): 71
+  bn@T0 among G*: 3 (anchor often bn@T0)
+
+--- Top 10 G* by proba ---
+       toolgroup    proba  y_pred_alarm  in_g_star  bn_t0_rule  eligible_B  snapshot_time_infer
+   DefMEt_FE_118 0.948411             1          1           1           0              26820.0
+Dielectric_FE_30 0.928073             1          1           0           0              26820.0
+    TF_Met_FE_61 0.881354             1          1           1           0              26820.0
+          EPI_38 0.861622             1          1           0           0              26820.0
+        DE_BE_66 0.724059             1          1           1           0              26820.0
+
+--- Sample eligible B (propagation can test) ---
+ toolgroup    proba  y_pred_alarm  in_g_star  bn_t0_rule  eligible_B  snapshot_time_infer
+   WE_BE_7 0.011026             0          0           0           1              26820.0
+Implant_74 0.050931             0          0           0           1              26820.0
+  WE_BE_17 0.059002             0          0           0           1              26820.0
+  DE_BE_48 0.059002             0          0           0           1              26820.0
+  DE_BE_50 0.059002             0          0           0           1              26820.0
+  DE_BE_69 0.059002             0          0           0           1              26820.0
+  DE_FE_56 0.059002             0          0           0           1              26820.0
+  DE_FE_58 0.059002             0          0           0           1              26820.0
+  DE_FE_62 0.059002             0          0           0           1              26820.0
+  DE_FE_70 0.059002             0          0           0           1              26820.0
+
+========== [3/5] FORWARD baseline x30 (seed 1..N) ==========
+--- run 1 / 30 (seed=1) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_01
+DISPATCH_MODE: rule
+seed         : 1
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 9e01a7f7765a
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 2 / 30 (seed=2) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_02
+DISPATCH_MODE: rule
+seed         : 2
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 6ff487d6c5d1
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 3 / 30 (seed=3) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_03
+DISPATCH_MODE: rule
+seed         : 3
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=130 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 16d8a1a173ce
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 4 / 30 (seed=4) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_04
+DISPATCH_MODE: rule
+seed         : 4
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : a010ae329fda
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 5 / 30 (seed=5) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_05
+DISPATCH_MODE: rule
+seed         : 5
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : e7bbb86285f0
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 6 / 30 (seed=6) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_06
+DISPATCH_MODE: rule
+seed         : 6
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 3310b4c20150
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 7 / 30 (seed=7) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_07
+DISPATCH_MODE: rule
+seed         : 7
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=130 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 0a9804859459
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 8 / 30 (seed=8) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_08
+DISPATCH_MODE: rule
+seed         : 8
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 5a356ff474d9
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 9 / 30 (seed=9) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_09
+DISPATCH_MODE: rule
+seed         : 9
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 9daa39a2bb2f
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 10 / 30 (seed=10) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_10
+DISPATCH_MODE: rule
+seed         : 10
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 844d2fc968df
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 11 / 30 (seed=11) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_11
+DISPATCH_MODE: rule
+seed         : 11
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=130 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : bc9a78235cf1
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 12 / 30 (seed=12) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_12
+DISPATCH_MODE: rule
+seed         : 12
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 218f3357278b
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 13 / 30 (seed=13) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_13
+DISPATCH_MODE: rule
+seed         : 13
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=130 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : f19bf4a6a65e
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 14 / 30 (seed=14) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_14
+DISPATCH_MODE: rule
+seed         : 14
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=130 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : d0d224e06eba
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 15 / 30 (seed=15) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_15
+DISPATCH_MODE: rule
+seed         : 15
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 9664490795be
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 16 / 30 (seed=16) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_16
+DISPATCH_MODE: rule
+seed         : 16
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 6dc9b27a97dd
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 17 / 30 (seed=17) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_17
+DISPATCH_MODE: rule
+seed         : 17
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 8360455d6a49
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 18 / 30 (seed=18) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_18
+DISPATCH_MODE: rule
+seed         : 18
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : e746503c3a04
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 19 / 30 (seed=19) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_19
+DISPATCH_MODE: rule
+seed         : 19
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=130 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 417da89b93a9
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 20 / 30 (seed=20) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_20
+DISPATCH_MODE: rule
+seed         : 20
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=130 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 249c949c2b64
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 21 / 30 (seed=21) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_21
+DISPATCH_MODE: rule
+seed         : 21
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 9cf9f84eb50e
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 22 / 30 (seed=22) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_22
+DISPATCH_MODE: rule
+seed         : 22
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=130 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 5c70f9bc86fe
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 23 / 30 (seed=23) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_23
+DISPATCH_MODE: rule
+seed         : 23
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 3d6a95e3b001
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 24 / 30 (seed=24) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_24
+DISPATCH_MODE: rule
+seed         : 24
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : b10cadb33bc5
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 25 / 30 (seed=25) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_25
+DISPATCH_MODE: rule
+seed         : 25
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : b13f935270b7
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 26 / 30 (seed=26) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_26
+DISPATCH_MODE: rule
+seed         : 26
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : ac1e25152e5f
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 27 / 30 (seed=27) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_27
+DISPATCH_MODE: rule
+seed         : 27
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : a1d487d3c6a6
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 28 / 30 (seed=28) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_28
+DISPATCH_MODE: rule
+seed         : 28
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : b6061be93b79
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 29 / 30 (seed=29) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_29
+DISPATCH_MODE: rule
+seed         : 29
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : c5f49c870231
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+--- run 30 / 30 (seed=30) ---
+OK FWD_BASE_T26820 -> VALIDATED
+================================================================
+Scenario     : FWD_BASE_T26820  (FORWARD)
+T0 (sim min) : 26820.0
+Horizon (min): 120.0  (SimPy 0..horizon)
+Description  : E2E baseline T0=26820 from sim_csv_out_1p5m
+CSV dir      : /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs/run_30
+DISPATCH_MODE: rule
+seed         : 30
+================================================================
+----------------------------------------------------------------
+Done. gym_steps=129 sim_now_rel=120.0 sim_now_abs=26940.0 terminated=True
+Release count (scenario)         : 1073
+lot_release_ledger rows          : 6
+Finished lots                    : 0
+Active lots remaining at horizon : 1073
+Run id (simulation_run)          : 9235f76707b2
+Status transition: VALIDATED -> RUNNING -> DONE
+----------------------------------------------------------------
+Wrote /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs_manifest.csv
+
+========== [4/5] L2 propagation (binom candidates) ==========
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/tools/stat_propagation_report.py:79: UserWarning: run_index=2: bn@T0 differs from run 1
+  summary, candidates, p_null = run_propagation_analysis(
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/tools/stat_propagation_report.py:79: UserWarning: run_index=6: bn@T0 differs from run 1
+  summary, candidates, p_null = run_propagation_analysis(
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/tools/stat_propagation_report.py:79: UserWarning: run_index=13: bn@T0 differs from run 1
+  summary, candidates, p_null = run_propagation_analysis(
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/tools/stat_propagation_report.py:79: UserWarning: run_index=25: bn@T0 differs from run 1
+  summary, candidates, p_null = run_propagation_analysis(
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+  tool chunk 1: kept 4,605 rows → 318 groups
+Wrote /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/propagation_summary.csv (106 TGs)
+Candidates: 0 -> /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/agent_handoff_propagation.json
+
+========== [5/5] Verify outputs ==========
+handoff candidate_rule: binom_L2
+handoff significance_alpha: 0.05
+handoff candidates: []
+handoff n_runs: 30
+
+propagation_summary: eligible_B rows=59 L2_candidates=0
+
+propagation_candidates.csv rows: 0
+
+DONE — artifacts in /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e
+
+All steps finished. Key files:
+  /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/g_star_T26820.json
+  /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/ml_alarm_audit_t*.csv
+  /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/ml_shap_top_t*.csv
+  /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/runs_manifest.csv
+  /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/agent_handoff_propagation.json
+  /Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/ml_propagation_e2e/propagation_candidates.csv

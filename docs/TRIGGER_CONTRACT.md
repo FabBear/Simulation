@@ -86,6 +86,32 @@ here so dashboards can rely on it.
 The engine is the SSOT. See [`FORWARD_WHATIF_ENGINE.md`](./FORWARD_WHATIF_ENGINE.md#what-if-action-ssot-locked-decision-4).
 Unknown action kinds land in `mes_scenario_run.validation_report.unknown_actions`.
 
+### `mes_wip_snapshot.status` vocabulary (Locked)
+
+**DB / FabEnv SSOT** — values stored in Postgres and read by `FabEnv` at T0 inject.
+Do **not** use Snapshot V2 strings (`QUEUE`, `TRANSPORT`) in `mes_wip_snapshot` without
+normalization.
+
+| MES value (canonical) | Meaning |
+|---|---|
+| `QUEUING` | Lot waiting at a tool (queue) |
+| `PROCESSING` | Lot on tool; requires `processing_remaining_min` > 0 when possible |
+| `WAIT_TRANSPORT` | Lot in transit between tools |
+| `HOLD` | Lot held (engine adds to `hold_lots`) |
+| `WAIT_BATCH` | Lot waiting for batch formation |
+
+| Alias (input) | Normalized to | Source |
+|---|---|---|
+| `QUEUE` | `QUEUING` | Snapshot V2 (`schemas/snapshot_v2.py`), Agent snapshot builder |
+| `TRANSPORT` | `WAIT_TRANSPORT` | Snapshot V2 |
+
+`load_mes_scenario.py` applies aliases on CSV/ETL load **before** insert.
+Platform `build_forward_scenario_from_csv.py` already emits canonical `QUEUING` /
+`PROCESSING`.
+
+**Not the same layer:** cold-start sim CSV (`lot_events.csv`) uses `event_type`
+(`ARRIVAL`, `START`, …) — not `mes_wip_snapshot.status`.
+
 ---
 
 ## Validation responsibilities
@@ -97,6 +123,7 @@ Unknown action kinds land in `mes_scenario_run.validation_report.unknown_actions
 | Releases / actions inside `[t0, t0+horizon]` | ETL |
 | `WHATIF` requires `baseline_scenario_id` and at least one `mes_whatif_action` | ETL |
 | WIP route/step exists in master | ETL |
+| `mes_wip_snapshot.status` canonical or alias (`QUEUE`→`QUEUING`, …) | ETL (`normalize_mes_wip_status`) |
 | Snapshot tool ids exist | Engine (`validation_report.missing_tools`) |
 | `PROCESSING` WIP missing `processing_remaining_min` | Engine (warning; finishes immediately per Locked decision §2) |
 | `VALIDATED` precondition | Trigger / operator |
@@ -113,7 +140,7 @@ in `mes_scenario_run.validation_report` for downstream review.
 | `simulation_run` | FabEnv (one per run) | Anyone joining log rows. |
 | `mes_scenario_run` | FabEnv | Trigger dashboards: confirm DONE + read `validation_report`. |
 | `simulation_log`, `lot_event_log`, `tool_state_log` | FabEnv | KPI tools, MES dashboards. |
-| `kpi_snapshot` | FabEnv | KPI dashboards. |
+| `kpi_fab`, `kpi_process`, `kpi_toolgroup`, `kpi_tool` | FabEnv | KPI dashboards (CSV 1:1). Legacy read: `kpi_snapshot` VIEW. |
 | `kpi_whatif_diff` | `tools/compare_whatif.py` after WHATIF run | Agent / report. |
 
 `kpi_whatif_diff` is **simulation output**, never MES cron input (Locked
@@ -154,6 +181,11 @@ snapshot/action rows.
 
 **Track B (what-if):** baseline `runs_manifest.csv` is **reused** from Track A; only what-if
 replicas are cloned and simulated N times.
+
+**Track B DB mode (`--source db`):** baseline `mes_*` is **cloned from Postgres** (no local
+`mes_*.csv` bundle). `make_whatif_scenario_from_db.py` → `run_monte_carlo_batch` (skips
+`load_mes_scenario.py`). Requires baseline FORWARD scenario already in DB (e.g. Track A
+`--source db`).
 
 **Agent submit (example):**
 
@@ -222,10 +254,11 @@ Success stdout (final line block):
 
 Flags: `--dry-run` (print commands only), `--skip-snapshot`, `--skip-load` (reuse prior bundle/DB row).
 
-### Track B example
+### Track B example (CSV baseline bundle)
 
 ```bash
 python tools/trigger_whatif_pipeline.py \
+  --source csv \
   --baseline-scenario-id FWD_BASE_T26820 \
   --baseline-bundle-dir scenario_out/FWD_BASE_T26820 \
   --reuse-baseline-manifest out/forward_trigger_T26820/runs_manifest.csv \
@@ -238,6 +271,22 @@ python tools/trigger_whatif_pipeline.py \
 ```
 
 Steps: `make_whatif_scenario_bundle.py` → `load_mes_scenario.py` → `run_monte_carlo_batch.py --track whatif` (baseline manifest **reused**, baseline sim not re-run).
+
+### Track B example (DB baseline clone — CSV-free)
+
+```bash
+python tools/trigger_whatif_pipeline.py \
+  --source db \
+  --baseline-scenario-id FWD_BASE_T26820 \
+  --reuse-baseline-manifest out/forward_T26820/runs_manifest.csv \
+  --whatif-scenario-id FWD_WHATIF_T26820_RANK1 \
+  --whatif-actions agent_actions/rank1_actions.csv \
+  --t0 26820 --horizon 120 \
+  --n-runs 30 --parallel 8 \
+  --out-dir out/whatif_T26820
+```
+
+Steps: `make_whatif_scenario_from_db.py` → `run_monte_carlo_batch.py --track whatif`. No `--baseline-bundle-dir`, no local `mes_*.csv`.
 
 Success stdout:
 

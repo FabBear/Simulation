@@ -329,15 +329,16 @@ class RealtimeWipSummary(Base):
 
 
 # -----------------------------------------------------------
-# [설계도 12] KPI 스냅샷 (4 레벨 long-format)
+# [설계도 12] KPI 스냅샷 — level별 4 테이블 (CSV 1:1; V6 migration)
+# Legacy `kpi_snapshot` table replaced by kpi_fab/process/toolgroup/tool.
+# Read-only UNION view `kpi_snapshot` is provided in V6 SQL for compatibility.
 # -----------------------------------------------------------
-class KpiSnapshot(Base):
-    __tablename__ = "kpi_snapshot"
+class KpiLevelBase(Base):
+    __abstract__ = True
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     run_id = Column(String, index=True, nullable=True)
     snapshot_time = Column(Float, index=True)          # sim minute
-    level = Column(String, index=True)                 # FAB / PROCESS / TOOLGROUP / TOOL
     scope = Column(String, index=True)                 # "*" | process_name | toolgroup_name | tool_id
     kpi_name = Column(String, index=True)              # rtf, throughput_24h, tat_min, ...
     value = Column(Float)                              # weighted sum or ratio
@@ -345,6 +346,41 @@ class KpiSnapshot(Base):
     numerator = Column(Float, nullable=True)
     denominator = Column(Float, nullable=True)
     meta = Column(Text, nullable=True)                 # optional JSON string (TEXT to match Flyway)
+
+
+class KpiFab(KpiLevelBase):
+    __tablename__ = "kpi_fab"
+    __table_args__ = (
+        Index("ix_kpi_fab_snapshot_time", "snapshot_time"),
+        Index("ix_kpi_fab_lookup", "run_id", "scope", "kpi_name", "snapshot_time"),
+    )
+
+
+class KpiProcess(KpiLevelBase):
+    __tablename__ = "kpi_process"
+    __table_args__ = (
+        Index("ix_kpi_process_snapshot_time", "snapshot_time"),
+        Index("ix_kpi_process_lookup", "run_id", "scope", "kpi_name", "snapshot_time"),
+    )
+
+
+class KpiToolgroup(KpiLevelBase):
+    __tablename__ = "kpi_toolgroup"
+    __table_args__ = (
+        Index("ix_kpi_toolgroup_snapshot_time", "snapshot_time"),
+        Index("ix_kpi_toolgroup_lookup", "run_id", "scope", "kpi_name", "snapshot_time"),
+    )
+
+
+class KpiTool(KpiLevelBase):
+    __tablename__ = "kpi_tool"
+    __table_args__ = (
+        Index("ix_kpi_tool_snapshot_time", "snapshot_time"),
+        Index("ix_kpi_tool_lookup", "run_id", "scope", "kpi_name", "snapshot_time"),
+    )
+
+
+KPI_LEVEL_MODELS = (KpiFab, KpiProcess, KpiToolgroup, KpiTool)
 
 
 # -----------------------------------------------------------

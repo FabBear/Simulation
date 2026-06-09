@@ -1,0 +1,15 @@
+{
+  "t0_sim_minute": 26820.0,
+  "inference_snapshot_time": 26820.0,
+  "alarm_threshold": 0.7,
+  "anchor_tg": "DefMEt_FE_118",
+  "toolgroups": [
+    "DE_BE_66",
+    "DefMEt_FE_118",
+    "Dielectric_FE_30",
+    "EPI_38",
+    "TF_Met_FE_61"
+  ],
+  "n_g_star": 5,
+  "n_eligible_B": 101
+}

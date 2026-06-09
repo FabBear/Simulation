@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "pipeline": "whatif",
+  "target_agent": "whatif_verification",
+  "generated_at": "2026-06-05T09:14:41Z",
+  "t0_sim_minute": 26820.0,
+  "horizon_minutes": 120.0,
+  "paired_n": 30,
+  "paired_manifest": "paired_manifest.csv",
+  "baseline_reused_from": "runs_manifest.csv",
+  "whatif": {
+    "baseline_scenario_id": "FWD_BASE_T26820",
+    "whatif_scenario_id": "FWD_WHATIF_T26820_STRONG",
+    "paired_n": 30,
+    "highlights": [
+      {
+        "scope": "Diffusion_FE_120#1",
+        "kpi_name": "q_len",
+        "mean_delta": -10.0,
+        "ci_95": [
+          -10.0,
+          -10.0
+        ],
+        "paired_t_p": 0.0,
+        "verdict": "improved"
+      }
+    ],
+    "summary_csv": "whatif_paired_summary.csv",
+    "paired_manifest": "paired_manifest.csv",
+    "baseline_reused_from": "runs_manifest.csv",
+    "level": "L3"
+  },
+  "agent_notes": [
+    "Paired t on D_i = whatif_i - baseline_i; same seed as runs_manifest.",
+    "Does not consume g_star_kpi_evidence."
+  ]
+}

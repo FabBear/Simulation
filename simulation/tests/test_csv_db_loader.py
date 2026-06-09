@@ -1,6 +1,6 @@
 """Unit tests for CSV → DB row mapping (no database required)."""
 
-from csv_db_mapping import KPI_FILE_TO_LEVEL, map_csv_row
+from csv_db_mapping import KPI_FILE_TO_LEVEL, KPI_FILE_TO_TABLE, map_csv_row
 
 
 def test_map_simulation_process():
@@ -48,7 +48,7 @@ def test_tool_id_empty_to_none():
     assert out["idle_units"] == 3
 
 
-def test_kpi_level_from_filename():
+def test_kpi_maps_to_level_table_without_level_column():
     row = {
         "run_id": "r1",
         "snapshot_time": "60.0",
@@ -61,7 +61,8 @@ def test_kpi_level_from_filename():
         "meta": "",
     }
     out = map_csv_row("kpi_fab.csv", row, "r1")
-    assert out["level"] == "FAB"
+    assert "level" not in out
+    assert KPI_FILE_TO_TABLE["kpi_fab.csv"] == "kpi_fab"
     assert out["window_minutes"] is None
     assert out["kpi_name"] == "rtf"
 

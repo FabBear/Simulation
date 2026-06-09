@@ -1,0 +1,12 @@
+t0=26820.0 inference_snap=26820.0
+alarm_threshold=0.7
+g_star_n=5
+eligible_B_n=101
+anchor=DefMEt_FE_118
+
+G* toolgroups:
+  - DE_BE_66
+  - DefMEt_FE_118
+  - Dielectric_FE_30
+  - EPI_38
+  - TF_Met_FE_61

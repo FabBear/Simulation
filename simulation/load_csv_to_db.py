@@ -18,14 +18,20 @@ if str(_ROOT) not in sys.path:
 from csv_db_mapping import (  # noqa: E402
     CSV_TO_TABLE,
     DATA_CSV_FILES,
-    KPI_FILE_TO_LEVEL,
+    KPI_FILE_TO_TABLE,
+    LOAD_CSV_FILES,
     OPTIONAL_CSV_FILES,
     map_csv_row,
 )
 from database import SessionLocal, engine  # noqa: E402
 from models import (  # noqa: E402
-    KpiSnapshot,
+    KpiFab,
+    KpiProcess,
+    KpiTool,
+    KpiToolgroup,
+    KPI_LEVEL_MODELS,
     LotEventLog,
+    LotReleaseLedger,
     SimulationLog,
     SimulationRun,
     ToolStateLog,
@@ -35,21 +41,31 @@ TABLE_MODEL = {
     "simulation_log": SimulationLog,
     "lot_event_log": LotEventLog,
     "tool_state_log": ToolStateLog,
-    "kpi_snapshot": KpiSnapshot,
+    "lot_release_ledger": LotReleaseLedger,
+    "kpi_fab": KpiFab,
+    "kpi_process": KpiProcess,
+    "kpi_toolgroup": KpiToolgroup,
+    "kpi_tool": KpiTool,
 }
 
 BATCH_SIZE = 2000
 
+_SCHEMA_SQL = (
+    "V5__simulation_run_and_run_id.sql",
+    "V6__kpi_level_tables.sql",
+)
 
-def _apply_v5_schema() -> None:
-    sql_path = _ROOT / "sql" / "V5__simulation_run_and_run_id.sql"
-    if not sql_path.is_file():
-        raise FileNotFoundError(f"Missing migration SQL: {sql_path}")
-    with engine.begin() as conn:
-        for stmt in sql_path.read_text(encoding="utf-8").split(";"):
-            s = stmt.strip()
-            if s:
-                conn.execute(text(s))
+
+def _apply_schema_sql() -> None:
+    for name in _SCHEMA_SQL:
+        sql_path = _ROOT / "sql" / name
+        if not sql_path.is_file():
+            raise FileNotFoundError(f"Missing migration SQL: {sql_path}")
+        with engine.begin() as conn:
+            for stmt in sql_path.read_text(encoding="utf-8").split(";"):
+                s = stmt.strip()
+                if s:
+                    conn.execute(text(s))
 
 
 def _discover_run_id(csv_dir: Path, explicit: str | None) -> str:
@@ -77,7 +93,7 @@ def _read_csv_rows(csv_dir: Path, filename: str) -> list[dict[str, str]]:
 
 
 def _truncate_run(db, run_id: str) -> None:
-    for model in (SimulationLog, LotEventLog, ToolStateLog, KpiSnapshot):
+    for model in (SimulationLog, LotEventLog, ToolStateLog, LotReleaseLedger, *KPI_LEVEL_MODELS):
         db.query(model).filter(model.run_id == run_id).delete(synchronize_session=False)
     db.query(SimulationRun).filter(SimulationRun.run_id == run_id).delete(synchronize_session=False)
     db.commit()
@@ -123,10 +139,10 @@ def load_directory(
     counts: dict[str, int] = {}
 
     if not skip_schema and not dry_run:
-        _apply_v5_schema()
+        _apply_schema_sql()
 
     if dry_run:
-        for filename in DATA_CSV_FILES:
+        for filename in LOAD_CSV_FILES:
             rows = _read_csv_rows(csv_dir, filename)
             if rows or filename not in OPTIONAL_CSV_FILES:
                 counts[filename] = len(rows)
@@ -139,7 +155,7 @@ def load_directory(
             _truncate_run(db, rid)
         _upsert_simulation_run(db, rid, str(csv_dir), note="load_csv_to_db.py")
 
-        for filename in DATA_CSV_FILES:
+        for filename in LOAD_CSV_FILES:
             fp = csv_dir / filename
             if not fp.is_file():
                 if filename in OPTIONAL_CSV_FILES:
@@ -176,7 +192,7 @@ def main() -> int:
     parser.add_argument("--run-id", type=str, default=None, help="Episode run_id (default: from CSV)")
     parser.add_argument("--dry-run", action="store_true", help="Count rows only, no DB writes")
     parser.add_argument("--truncate-run", action="store_true", help="Delete existing rows for this run_id first")
-    parser.add_argument("--skip-schema", action="store_true", help="Do not apply V5 SQL (Flyway already applied)")
+    parser.add_argument("--skip-schema", action="store_true", help="Do not apply V5/V6 SQL (Flyway already applied)")
     args = parser.parse_args()
 
     try:

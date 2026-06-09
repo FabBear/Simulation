@@ -20,12 +20,44 @@ from models import (
     MesToolSnapshot,
     MesToolQueueSnapshot,
     MesLotReleasePlan,
+    MesCqtSnapshot,
     MesForwardInputEvent,
     MesWhatifAction,
     MesOperatingEvent,
     ProcessStep,
     ToolGroup,
 )
+
+# SSOT: docs/TRIGGER_CONTRACT.md § mes_wip_snapshot.status vocabulary
+MES_WIP_STATUS_CANONICAL = frozenset({
+    "QUEUING",
+    "PROCESSING",
+    "WAIT_TRANSPORT",
+    "HOLD",
+    "WAIT_BATCH",
+})
+
+# Snapshot V2 / Agent internal aliases → MES DB enum (normalized on load).
+MES_WIP_STATUS_ALIASES: dict[str, str] = {
+    "QUEUE": "QUEUING",
+    "TRANSPORT": "WAIT_TRANSPORT",
+}
+
+
+def normalize_mes_wip_status(raw: str) -> str:
+    """Map aliases to MES vocabulary; reject unknown values before DB insert."""
+    key = (raw or "").strip().upper()
+    if not key:
+        raise ValueError("mes_wip_snapshot.status is empty")
+    canonical = MES_WIP_STATUS_ALIASES.get(key, key)
+    if canonical not in MES_WIP_STATUS_CANONICAL:
+        allowed = ", ".join(sorted(MES_WIP_STATUS_CANONICAL))
+        raise ValueError(
+            f"mes_wip_snapshot.status {raw!r} → {canonical!r} not allowed; "
+            f"allowed: {allowed}; aliases: QUEUE→QUEUING, TRANSPORT→WAIT_TRANSPORT"
+        )
+    return canonical
+
 
 def _float(v):
     if v is None or str(v).strip() == "":
@@ -98,7 +130,7 @@ def _load_wip(db, scenario_id, rows):
             lot_id=row["lot_id"].strip(),
             route_id=row["route_id"].strip(),
             current_step_seq=int(row["current_step_seq"]),
-            status=row["status"].strip(),
+            status=normalize_mes_wip_status(row["status"]),
             tool_group=(row.get("tool_group") or "").strip() or None,
             tool_id=(row.get("tool_id") or "").strip() or None,
             queue_position=_int(row.get("queue_position")),
@@ -325,6 +357,202 @@ def validate_scenario(db, scenario_id: str) -> list[str]:
 
 
 _CORE_SNAPSHOT_TABLES = ("wip", "tools", "queues", "releases")
+
+
+def _load_rows_from_path(path: Path | None) -> list[dict]:
+    """Load CSV or JSON list of row dicts (actions / release patch)."""
+    if path is None or not path.is_file():
+        return []
+    if path.suffix.lower() == ".json":
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict) and isinstance(data.get("rows"), list):
+            return data["rows"]
+        raise ValueError(f"JSON must be a list of rows or {{'rows': [...]}}: {path}")
+    return _load_csv(path)
+
+
+def _release_orm_to_dict(row: MesLotReleasePlan) -> dict:
+    return {
+        "scenario_id": row.scenario_id,
+        "product_name": row.product_name,
+        "route_name": row.route_name,
+        "release_time": row.release_time,
+        "lots_count": row.lots_count,
+        "release_interval": row.release_interval,
+        "due_date_sim": row.due_date_sim,
+        "wafers_per_lot": row.wafers_per_lot,
+        "priority": row.priority,
+        "is_super_hot": "true" if row.is_super_hot else "false",
+        "lot_type": row.lot_type or "",
+        "lot_name_prefix": row.lot_name_prefix or "",
+        "source_lot_release_id": row.source_lot_release_id or "",
+    }
+
+
+def _delete_scenario_snapshot_children(db, scenario_id: str) -> None:
+    for model in (
+        MesWipSnapshot,
+        MesToolSnapshot,
+        MesToolQueueSnapshot,
+        MesLotReleasePlan,
+        MesCqtSnapshot,
+        MesWhatifAction,
+        MesForwardInputEvent,
+        MesOperatingEvent,
+    ):
+        db.query(model).filter(model.scenario_id == scenario_id).delete(synchronize_session=False)
+
+
+def persist_whatif_from_db(
+    baseline_scenario_id: str,
+    whatif_scenario_id: str,
+    t0: float,
+    horizon: float,
+    description: str,
+    *,
+    whatif_actions_path: Path | None = None,
+    plan_patch_path: Path | None = None,
+    force_draft: bool = True,
+) -> dict:
+    """Clone baseline mes_* from DB, apply patches/actions, persist WHATIF scenario."""
+    from types import SimpleNamespace
+
+    from tools.clone_mes_scenarios_for_monte_carlo import _copy_child_rows
+    from tools.make_whatif_scenario_bundle import _patch_releases
+
+    db = SessionLocal()
+    try:
+        baseline = (
+            db.query(MesScenario)
+            .filter(MesScenario.scenario_id == baseline_scenario_id)
+            .first()
+        )
+        if not baseline:
+            raise ValueError(f"baseline scenario not found: {baseline_scenario_id}")
+
+        mode = (baseline.mode or "").upper().replace("-", "")
+        if mode != "FORWARD":
+            print(
+                f"⚠️  baseline {baseline_scenario_id} mode={baseline.mode!r} (expected FORWARD)",
+                file=sys.stderr,
+            )
+
+        trigger_meta = json.dumps(
+            {
+                "builder": "make_whatif_scenario_from_db",
+                "baseline": baseline_scenario_id,
+            },
+            ensure_ascii=False,
+        )
+        args = SimpleNamespace(
+            scenario_id=whatif_scenario_id,
+            description=description,
+            t0=t0,
+            horizon=horizon,
+            mode="WHATIF",
+            baseline=baseline_scenario_id,
+            use_master_lot_release=False,
+            trigger_meta=trigger_meta,
+            force_draft=force_draft,
+        )
+        _upsert_scenario(db, args)
+        _delete_scenario_snapshot_children(db, whatif_scenario_id)
+        db.flush()
+
+        counts: dict[str, int] = {}
+        clone_models = (
+            MesWipSnapshot,
+            MesToolSnapshot,
+            MesToolQueueSnapshot,
+            MesLotReleasePlan,
+            MesCqtSnapshot,
+        )
+        for model in clone_models:
+            counts[model.__tablename__] = _copy_child_rows(
+                db, model, baseline_scenario_id, whatif_scenario_id,
+            )
+
+        if plan_patch_path and plan_patch_path.is_file():
+            base_rows = [
+                _release_orm_to_dict(r)
+                for r in db.query(MesLotReleasePlan)
+                .filter(MesLotReleasePlan.scenario_id == whatif_scenario_id)
+                .all()
+            ]
+            patch_rows = _load_rows_from_path(plan_patch_path)
+            patched = _patch_releases(base_rows, patch_rows, whatif_scenario_id)
+            db.query(MesLotReleasePlan).filter(
+                MesLotReleasePlan.scenario_id == whatif_scenario_id,
+            ).delete(synchronize_session=False)
+            _load_releases(db, whatif_scenario_id, patched)
+            counts["mes_lot_release_plan"] = len(patched)
+
+        action_rows = _load_rows_from_path(whatif_actions_path)
+        if action_rows:
+            _load_whatif(db, whatif_scenario_id, action_rows)
+
+        db.commit()
+
+        errs = validate_scenario(db, whatif_scenario_id)
+        if errs:
+            raise ValueError("validation failed: " + "; ".join(errs))
+
+        compat = _audit_fab_env_compat(db, whatif_scenario_id)
+        return {
+            "baseline_scenario_id": baseline_scenario_id,
+            "whatif_scenario_id": whatif_scenario_id,
+            "cloned": counts,
+            "actions": len(action_rows),
+            "compat_warnings": compat,
+        }
+    finally:
+        db.close()
+
+
+def persist_forward_bundle_to_db(
+    scenario_id: str,
+    t0: float,
+    horizon: float,
+    description: str,
+    built: dict,
+    *,
+    source_run_id: str | None = None,
+    force_draft: bool = True,
+) -> None:
+    """Insert FORWARD mes_scenario + mes_* snapshots from build_forward output dict."""
+    from types import SimpleNamespace
+
+    trigger_meta = json.dumps(
+        {
+            **built.get("confidence", {}),
+            "source_run_id": source_run_id,
+            "builder": "build_forward_scenario_from_db",
+        },
+        ensure_ascii=False,
+    )
+    args = SimpleNamespace(
+        scenario_id=scenario_id,
+        description=description,
+        t0=t0,
+        horizon=horizon,
+        mode="FORWARD",
+        baseline="",
+        use_master_lot_release=False,
+        trigger_meta=trigger_meta,
+        force_draft=force_draft,
+    )
+    db = SessionLocal()
+    try:
+        _upsert_scenario(db, args)
+        _load_tools(db, scenario_id, built.get("tool_rows") or [])
+        _load_queues(db, scenario_id, built.get("queue_rows") or [])
+        _load_wip(db, scenario_id, built.get("wip_rows") or [])
+        _load_releases(db, scenario_id, built.get("release_rows") or [])
+        db.commit()
+    finally:
+        db.close()
 
 
 def main() -> int:

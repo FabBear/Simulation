@@ -1,0 +1,339 @@
+{
+  "source_scenario_id": "FWD_BASE_T26820",
+  "n_runs": 30,
+  "suffix_pattern": "FWD_BASE_T26820_R{run:02d}",
+  "replica_scenario_ids": [
+    "FWD_BASE_T26820_R01",
+    "FWD_BASE_T26820_R02",
+    "FWD_BASE_T26820_R03",
+    "FWD_BASE_T26820_R04",
+    "FWD_BASE_T26820_R05",
+    "FWD_BASE_T26820_R06",
+    "FWD_BASE_T26820_R07",
+    "FWD_BASE_T26820_R08",
+    "FWD_BASE_T26820_R09",
+    "FWD_BASE_T26820_R10",
+    "FWD_BASE_T26820_R11",
+    "FWD_BASE_T26820_R12",
+    "FWD_BASE_T26820_R13",
+    "FWD_BASE_T26820_R14",
+    "FWD_BASE_T26820_R15",
+    "FWD_BASE_T26820_R16",
+    "FWD_BASE_T26820_R17",
+    "FWD_BASE_T26820_R18",
+    "FWD_BASE_T26820_R19",
+    "FWD_BASE_T26820_R20",
+    "FWD_BASE_T26820_R21",
+    "FWD_BASE_T26820_R22",
+    "FWD_BASE_T26820_R23",
+    "FWD_BASE_T26820_R24",
+    "FWD_BASE_T26820_R25",
+    "FWD_BASE_T26820_R26",
+    "FWD_BASE_T26820_R27",
+    "FWD_BASE_T26820_R28",
+    "FWD_BASE_T26820_R29",
+    "FWD_BASE_T26820_R30"
+  ],
+  "actions": [
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R01",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R02",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R03",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R04",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R05",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R06",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R07",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R08",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R09",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R10",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R11",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R12",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R13",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R14",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R15",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R16",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R17",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R18",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R19",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R20",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R21",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R22",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R23",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R24",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R25",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R26",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R27",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R28",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R29",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    },
+    {
+      "replica_scenario_id": "FWD_BASE_T26820_R30",
+      "action": "created",
+      "child_counts": {
+        "mes_wip_snapshot": 1067,
+        "mes_tool_snapshot": 997,
+        "mes_tool_queue_snapshot": 772,
+        "mes_lot_release_plan": 6
+      }
+    }
+  ]
+}

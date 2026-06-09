@@ -1,0 +1,10 @@
+{
+  "scenario_id": "FWD_WHATIF_T26820_STRONG",
+  "mode": "WHATIF",
+  "baseline_scenario_id": "FWD_BASE_T26820",
+  "t0_sim_minute": 26820.0,
+  "horizon_minutes": 120.0,
+  "use_master_lot_release": false,
+  "description": "E2E strong what-if actions @ T26820",
+  "source_baseline_dir": "/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/scenario_out/FWD_BASE_T26820"
+}

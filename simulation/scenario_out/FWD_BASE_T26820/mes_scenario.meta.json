@@ -1,0 +1,9 @@
+{
+  "scenario_id": "FWD_BASE_T26820",
+  "mode": "FORWARD",
+  "t0_sim_minute": 26820.0,
+  "horizon_minutes": 120.0,
+  "use_master_lot_release": false,
+  "description": "Built from sim_csv via build_forward_scenario_from_csv.py",
+  "source_run_id": "ece173272af7"
+}

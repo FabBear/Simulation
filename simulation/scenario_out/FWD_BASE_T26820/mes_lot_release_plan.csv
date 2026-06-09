@@ -1,0 +1,7 @@
+scenario_id,product_name,route_name,release_time,lots_count,release_interval,due_date_sim,wafers_per_lot,priority,is_super_hot,lot_type,lot_name_prefix,source_lot_release_id
+FWD_BASE_T26820,Product_3,Route_Product_3,26827.109999999786,1,0,101194.244,25,10,false,Regular_Lot_3,,
+FWD_BASE_T26820,Product_4,Route_Product_4,26827.109999999786,1,0,69416.74333333333,25,10,false,Regular_Lot_4,,
+FWD_BASE_T26820,Product_3,Route_Product_3,26878.799999999785,1,0,101245.93400000001,25,10,false,Regular_Lot_3,,
+FWD_BASE_T26820,Product_4,Route_Product_4,26878.799999999785,1,0,69468.43333333333,25,10,false,Regular_Lot_4,,
+FWD_BASE_T26820,Product_3,Route_Product_3,26930.489999999783,1,0,101297.62400000001,25,10,false,Regular_Lot_3,,
+FWD_BASE_T26820,Product_4,Route_Product_4,26930.489999999783,1,0,69520.12333333332,25,10,false,Regular_Lot_4,,

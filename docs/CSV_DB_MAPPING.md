@@ -61,20 +61,19 @@ FabEnv가 `sim_csv_out`에 쓰는 CSV 7종과 PostgreSQL 로그 테이블의 컬
 | reason | reason |
 | idle_units … down_bm_units | 동명 |
 
-## 4. KPI CSV → kpi_snapshot
+## 4. KPI CSV → level별 테이블 (V6)
 
-| CSV 파일 | DB `level` |
-|----------|------------|
-| kpi_fab.csv | FAB |
-| kpi_process.csv | PROCESS |
-| kpi_toolgroup.csv | TOOLGROUP |
-| kpi_tool.csv | TOOL |
+| CSV 파일 | DB 테이블 |
+|----------|-----------|
+| kpi_fab.csv | `kpi_fab` |
+| kpi_process.csv | `kpi_process` |
+| kpi_toolgroup.csv | `kpi_toolgroup` |
+| kpi_tool.csv | `kpi_tool` |
 
-| CSV | DB |
-|-----|-----|
+| CSV | DB (4테이블 공통) |
+|-----|-------------------|
 | run_id | run_id |
 | snapshot_time | snapshot_time |
-| — | level ← 파일명 |
 | scope | scope |
 | kpi_name | kpi_name |
 | value | value |
@@ -82,6 +81,25 @@ FabEnv가 `sim_csv_out`에 쓰는 CSV 7종과 PostgreSQL 로그 테이블의 컬
 | numerator | numerator |
 | denominator | denominator |
 | meta | meta |
+
+레거시 통합 조회: `kpi_snapshot` **VIEW** (`level` 컬럼 포함, 읽기 전용). Flyway `V6__kpi_level_tables.sql`.
+
+## 5. lot_release_ledger.csv → lot_release_ledger
+
+| CSV | DB |
+|-----|-----|
+| run_id | run_id |
+| scenario_id | scenario_id (`""` → NULL) |
+| lot_id | lot_id |
+| lot_type | lot_type |
+| product_name | product_name |
+| route_name | route_name |
+| sim_now_min | sim_now_min |
+| due_date_sim_min | due_date_sim_min |
+| priority | priority |
+| is_super_hot | is_super_hot (0/1/true → bool) |
+| wafers_per_lot | wafers_per_lot |
+| source | source |
 
 ## CSV-only / DB-only
 
@@ -95,9 +113,9 @@ FabEnv가 `sim_csv_out`에 쓰는 CSV 7종과 PostgreSQL 로그 테이블의 컬
 
 | 경로 | run_id | KPI level |
 |------|--------|-----------|
-| FabEnv → DB | `_csv_run_id` | 코드에서 설정 |
+| FabEnv → DB | `_csv_run_id` | level별 테이블 라우팅 |
 | FabEnv → CSV | 동일 | 파일 분할 |
-| load_csv_to_db | CSV `run_id` | 파일명 → level |
+| load_csv_to_db | CSV `run_id` | 파일명 → 테이블 |
 
 ## 마이그레이션
 

@@ -21,6 +21,43 @@ def _parse_result_json(stdout: str) -> dict:
     return json.loads(stdout[start:])
 
 
+def test_forward_pipeline_db_source_dry_run(tmp_path: Path):
+    g_star = tmp_path / "g_star.json"
+    g_star.write_text(json.dumps({"toolgroups": ["TG1"]}), encoding="utf-8")
+    out_dir = tmp_path / "forward_db_out"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(_FORWARD),
+            "--source",
+            "db",
+            "--run-id",
+            "run_test",
+            "--t0",
+            "26820",
+            "--horizon",
+            "120",
+            "--scenario-id",
+            "FWD_BASE_T26820",
+            "--g-star-file",
+            str(g_star),
+            "--n-runs",
+            "5",
+            "--out-dir",
+            str(out_dir),
+            "--dry-run",
+        ],
+        cwd=str(_SIM),
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    combined = proc.stdout
+    assert "build_forward_scenario_from_db.py" in combined
+    assert "load_mes_scenario.py" not in combined
+    assert combined.index("build_forward_scenario_from_db.py") < combined.index("run_monte_carlo_batch.py")
+
+
 def test_forward_pipeline_dry_run_chain(tmp_path: Path):
     g_star = tmp_path / "g_star.json"
     g_star.write_text(json.dumps({"toolgroups": ["TG1"]}), encoding="utf-8")
@@ -66,6 +103,61 @@ def test_forward_pipeline_dry_run_chain(tmp_path: Path):
     assert result["template_scenario_id"] == "FWD_BASE_T26820"
     assert "handoff_path" in result
     assert len(result["replica_scenario_ids"]) == 5
+
+
+def test_whatif_pipeline_db_source_dry_run(tmp_path: Path):
+    actions = tmp_path / "actions.csv"
+    actions.write_text(
+        "scenario_id,action_kind,effective_time\n"
+        "FWD_WHATIF_T26820_RANK1,LOT_HOLD,26821\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "runs_manifest.csv"
+    manifest.write_text(
+        "run_index,seed,scenario_id,run_id,csv_dir,status\n"
+        + "\n".join(f"{i},{i},FWD_BASE,run{i},/tmp/r{i},ok" for i in range(1, 6))
+        + "\n",
+        encoding="utf-8",
+    )
+    out_dir = tmp_path / "whatif_db_out"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(_WHATIF),
+            "--source",
+            "db",
+            "--baseline-scenario-id",
+            "FWD_BASE_T26820",
+            "--reuse-baseline-manifest",
+            str(manifest),
+            "--whatif-scenario-id",
+            "FWD_WHATIF_T26820_RANK1",
+            "--whatif-actions",
+            str(actions),
+            "--t0",
+            "26820",
+            "--horizon",
+            "120",
+            "--n-runs",
+            "5",
+            "--out-dir",
+            str(out_dir),
+            "--dry-run",
+        ],
+        cwd=str(_SIM),
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    combined = proc.stdout
+    assert "make_whatif_scenario_from_db.py" in combined
+    assert "load_mes_scenario.py" not in combined
+    i_make = combined.index("make_whatif_scenario_from_db.py")
+    i_mc = combined.index("run_monte_carlo_batch.py")
+    assert i_make < i_mc
+    result = _parse_result_json(combined)
+    assert result["track"] == "whatif"
+    assert result["template_scenario_id"] == "FWD_WHATIF_T26820_RANK1"
 
 
 def test_whatif_pipeline_dry_run_chain(tmp_path: Path):

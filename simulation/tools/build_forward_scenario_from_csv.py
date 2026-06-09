@@ -135,6 +135,20 @@ class MasterContext:
 
 
 @dataclass
+class ScenarioInputs:
+    """Normalized cold-start inputs for build_scenario_from_inputs (CSV or DB)."""
+
+    ledger: Dict[str, dict]
+    traces: Dict[str, "LotTrace"]
+    ltl_lock: Dict[str, Dict[int, str]]
+    tool_last: Dict[str, dict]
+    run_lot: Dict[str, str]
+    q_len: Dict[str, float]
+    proc_count: Dict[str, float]
+    arrival_rows: List[dict]
+
+
+@dataclass
 class LotTrace:
     lot_id: str
     product: str = ""
@@ -256,15 +270,19 @@ def _choose_tool(
     return cands[0]
 
 
-def _load_release_ledger(path: Path, run_id: str) -> Dict[str, dict]:
-    if not path.is_file():
-        return {}
+def _load_release_ledger_from_rows(rows: Iterable[dict]) -> Dict[str, dict]:
     out: Dict[str, dict] = {}
-    for row in _iter_csv(path, run_id):
+    for row in rows:
         lot_id = (row.get("lot_id") or "").strip()
         if lot_id:
             out[lot_id] = row
     return out
+
+
+def _load_release_ledger(path: Path, run_id: str) -> Dict[str, dict]:
+    if not path.is_file():
+        return {}
+    return _load_release_ledger_from_rows(_iter_csv(path, run_id))
 
 
 def _apply_ledger_to_traces(traces: Dict[str, LotTrace], ledger: Dict[str, dict]) -> None:
@@ -286,15 +304,14 @@ def _apply_ledger_to_traces(traces: Dict[str, LotTrace], ledger: Dict[str, dict]
             tr.wafers_per_lot = _int(row.get("wafers_per_lot"), 1)
 
 
-def _load_lot_traces(
-    path: Path,
-    run_id: str,
+def _load_lot_traces_from_rows(
+    rows: Iterable[dict],
     t_end: float,
     ledger: Optional[Dict[str, dict]] = None,
 ) -> Dict[str, LotTrace]:
     ledger = ledger or {}
     traces: Dict[str, LotTrace] = {}
-    for row in _iter_csv(path, run_id):
+    for row in rows:
         et = _float(row.get("event_time"))
         if et > t_end:
             continue
@@ -334,9 +351,18 @@ def _load_lot_traces(
     return traces
 
 
-def _load_ltl_lock(process_path: Path, run_id: str, t0: float) -> Dict[str, Dict[int, str]]:
+def _load_lot_traces(
+    path: Path,
+    run_id: str,
+    t_end: float,
+    ledger: Optional[Dict[str, dict]] = None,
+) -> Dict[str, LotTrace]:
+    return _load_lot_traces_from_rows(_iter_csv(path, run_id), t_end, ledger)
+
+
+def _load_ltl_lock_from_rows(rows: Iterable[dict], t0: float) -> Dict[str, Dict[int, str]]:
     lock: Dict[str, Dict[int, str]] = defaultdict(dict)
-    for row in _iter_csv(process_path, run_id):
+    for row in rows:
         end_t = _float(row.get("end_time"))
         if end_t > t0:
             continue
@@ -348,12 +374,16 @@ def _load_ltl_lock(process_path: Path, run_id: str, t0: float) -> Dict[str, Dict
     return lock
 
 
-def _load_tool_state_at(
-    path: Path, run_id: str, t0: float,
+def _load_ltl_lock(process_path: Path, run_id: str, t0: float) -> Dict[str, Dict[int, str]]:
+    return _load_ltl_lock_from_rows(_iter_csv(process_path, run_id), t0)
+
+
+def _load_tool_state_at_from_rows(
+    rows: Iterable[dict], t0: float,
 ) -> Tuple[Dict[str, dict], Dict[str, str]]:
     """Last unit-level tool row with state_change_time <= t0; run_lot per tool at T0."""
     last: Dict[str, dict] = {}
-    for row in _iter_csv(path, run_id):
+    for row in rows:
         tid = (row.get("tool_id") or "").strip()
         if not tid or "#" not in tid:
             continue
@@ -374,10 +404,18 @@ def _load_tool_state_at(
     return last, run_lot
 
 
-def _load_kpi_tool_at(path: Path, run_id: str, t0: float) -> Tuple[Dict[str, float], Dict[str, float]]:
+def _load_tool_state_at(
+    path: Path, run_id: str, t0: float,
+) -> Tuple[Dict[str, dict], Dict[str, str]]:
+    return _load_tool_state_at_from_rows(_iter_csv(path, run_id), t0)
+
+
+def _load_kpi_tool_at_from_rows(
+    rows: Iterable[dict], t0: float,
+) -> Tuple[Dict[str, float], Dict[str, float]]:
     q_len: Dict[str, float] = {}
     proc_count: Dict[str, float] = {}
-    for row in _iter_csv(path, run_id):
+    for row in rows:
         if _float(row.get("snapshot_time")) != float(t0):
             continue
         scope = (row.get("scope") or "").strip()
@@ -390,6 +428,53 @@ def _load_kpi_tool_at(path: Path, run_id: str, t0: float) -> Tuple[Dict[str, flo
         elif name == "processing_count":
             proc_count[scope] = val
     return q_len, proc_count
+
+
+def _load_kpi_tool_at(path: Path, run_id: str, t0: float) -> Tuple[Dict[str, float], Dict[str, float]]:
+    return _load_kpi_tool_at_from_rows(_iter_csv(path, run_id), t0)
+
+
+def _collect_arrival_rows(rows: Iterable[dict], t0: float, t_end: float) -> List[dict]:
+    out: List[dict] = []
+    for row in rows:
+        if (row.get("event_type") or "").strip().upper() != "ARRIVAL":
+            continue
+        et = _float(row.get("event_time"))
+        if et <= t0 or et > t_end:
+            continue
+        out.append(dict(row))
+    return out
+
+
+def load_scenario_inputs_from_csv(
+    run_id: str,
+    t0: float,
+    horizon: float,
+    sim_csv_dir: Path,
+) -> ScenarioInputs:
+    t_end = t0 + horizon
+    lot_path = sim_csv_dir / "lot_events.csv"
+    ledger_path = sim_csv_dir / "lot_release_ledger.csv"
+    tool_path = sim_csv_dir / "tool_state.csv"
+    kpi_path = sim_csv_dir / "kpi_tool.csv"
+    process_path = sim_csv_dir / "simulation_process.csv"
+
+    ledger = _load_release_ledger(ledger_path, run_id)
+    lot_rows = list(_iter_csv(lot_path, run_id))
+    traces = _load_lot_traces_from_rows(lot_rows, t_end, ledger)
+    _apply_ledger_to_traces(traces, ledger)
+    tool_last, run_lot = _load_tool_state_at(tool_path, run_id, t0)
+    q_len, proc_count = _load_kpi_tool_at(kpi_path, run_id, t0)
+    return ScenarioInputs(
+        ledger=ledger,
+        traces=traces,
+        ltl_lock=_load_ltl_lock(process_path, run_id, t0),
+        tool_last=tool_last,
+        run_lot=run_lot,
+        q_len=q_len,
+        proc_count=proc_count,
+        arrival_rows=_collect_arrival_rows(lot_rows, t0, t_end),
+    )
 
 
 def _lot_defaults(master: MasterContext, tr: LotTrace) -> None:
@@ -457,19 +542,25 @@ def build_scenario(
     sim_csv_dir: Path,
     scenario_id: str,
 ) -> dict:
-    t_end = t0 + horizon
-    lot_path = sim_csv_dir / "lot_events.csv"
-    ledger_path = sim_csv_dir / "lot_release_ledger.csv"
-    tool_path = sim_csv_dir / "tool_state.csv"
-    kpi_path = sim_csv_dir / "kpi_tool.csv"
-    process_path = sim_csv_dir / "simulation_process.csv"
+    inputs = load_scenario_inputs_from_csv(run_id, t0, horizon, sim_csv_dir)
+    return build_scenario_from_inputs(master, run_id, t0, horizon, scenario_id, inputs)
 
-    ledger = _load_release_ledger(ledger_path, run_id)
-    traces = _load_lot_traces(lot_path, run_id, t_end, ledger)
-    _apply_ledger_to_traces(traces, ledger)
-    ltl_lock = _load_ltl_lock(process_path, run_id, t0)
-    tool_last, run_lot = _load_tool_state_at(tool_path, run_id, t0)
-    q_len, _proc_count = _load_kpi_tool_at(kpi_path, run_id, t0)
+
+def build_scenario_from_inputs(
+    master: MasterContext,
+    run_id: str,
+    t0: float,
+    horizon: float,
+    scenario_id: str,
+    inputs: ScenarioInputs,
+) -> dict:
+    t_end = t0 + horizon
+    ledger = inputs.ledger
+    traces = inputs.traces
+    ltl_lock = inputs.ltl_lock
+    tool_last = inputs.tool_last
+    run_lot = inputs.run_lot
+    q_len = inputs.q_len
 
     wip_lot_ids: Set[str] = set()
     for lid, tr in traces.items():
@@ -615,12 +706,8 @@ def build_scenario(
         if lid not in wip_lot_ids
         and t0 < _float(row.get("sim_now_min")) <= t_end
     }
-    for row in _iter_csv(lot_path, run_id):
-        if (row.get("event_type") or "").strip().upper() != "ARRIVAL":
-            continue
+    for row in inputs.arrival_rows:
         et = _float(row.get("event_time"))
-        if et <= t0 or et > t_end:
-            continue
         lot_id = (row.get("lot_id") or "").strip()
         if lot_id in wip_lot_ids or lot_id in ledger_release_lots:
             continue

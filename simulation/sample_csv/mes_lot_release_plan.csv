@@ -1,1 +1,0 @@
-scenario_id,source_lot_release_id,product_name,route_name,release_time,lots_count,release_interval,lot_name_prefix,lot_type,priority,due_date_sim,wafers_per_lot,is_super_hot,mes_row_hash,source_line_no

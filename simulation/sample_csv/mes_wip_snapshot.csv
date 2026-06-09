@@ -1,1 +1,0 @@
-scenario_id,snapshot_time,lot_id,route_id,current_step_seq,status,tool_group,tool_id,queue_position,due_date_sim,priority,rem_steps,processing_remaining_min,wafers_per_lot,product,is_super_hot

@@ -15,7 +15,8 @@ import uuid
 from database import SessionLocal
 from models import (
     ToolGroup, LotRelease, ProcessStep, SetupInfo, BreakdownEvent, PMEvent, TransportTime,
-    SimulationLog, LotEventLog, LotReleaseLedger, ToolStateLog, ActiveCqtTimer, RealtimeWipSummary, KpiSnapshot,
+    SimulationLog, LotEventLog, LotReleaseLedger, ToolStateLog, ActiveCqtTimer, RealtimeWipSummary,
+    KpiFab, KpiProcess, KpiToolgroup, KpiTool,
     SimulationRun,
     MesScenario, MesScenarioRun,
     MesWipSnapshot, MesToolSnapshot, MesToolQueueSnapshot, MesCqtSnapshot,
@@ -168,6 +169,12 @@ _KPI_CSV_BY_LEVEL = {
     "PROCESS": "kpi_process.csv",
     "TOOLGROUP": "kpi_toolgroup.csv",
     "TOOL": "kpi_tool.csv",
+}
+_KPI_MODEL_BY_LEVEL = {
+    "FAB": KpiFab,
+    "PROCESS": KpiProcess,
+    "TOOLGROUP": KpiToolgroup,
+    "TOOL": KpiTool,
 }
 # Legacy combined file (opt-in via KPI_CSV_LEGACY_COMBINED=1)
 _SIM_CSV_KPI_LEGACY_FIELDS = (
@@ -2578,8 +2585,20 @@ class FabEnv(gym.Env):
         if not rows:
             return
         try:
+            by_model = defaultdict(list)
+            for row in rows:
+                level = row.get("level")
+                model = _KPI_MODEL_BY_LEVEL.get(level)
+                if model is None:
+                    continue
+                db_row = {k: v for k, v in row.items() if k != "level"}
+                by_model[model].append(db_row)
+            if not by_model:
+                self._kpi_batch = []
+                return
             db = SessionLocal()
-            db.bulk_insert_mappings(KpiSnapshot, rows)
+            for model, chunk_rows in by_model.items():
+                db.bulk_insert_mappings(model, chunk_rows)
             db.commit()
             db.close()
         except Exception:

@@ -1,6 +1,0 @@
-run_index,seed,scenario_id,run_id,csv_dir,status
-1,1,FWD_BASE_T26820,99d81db7e84b,/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/validate_20260605/runs/run_01,ok
-2,2,FWD_BASE_T26820,541b04d00065,/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/validate_20260605/runs/run_02,ok
-3,3,FWD_BASE_T26820,f668405a780a,/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/validate_20260605/runs/run_03,ok
-4,4,FWD_BASE_T26820,e75511f1159b,/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/validate_20260605/runs/run_04,ok
-5,5,FWD_BASE_T26820,e86d0a5f54a8,/Users/skala/Desktop/SKALA/Final_Project/FAB_BEAR/simulation/out/validate_20260605/runs/run_05,ok

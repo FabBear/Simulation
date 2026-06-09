@@ -1,2 +1,0 @@
-level,scope,kpi_name,paired_n,mean_delta,ci_lo,ci_hi,paired_t_p,verdict,nonzero_delta
-TOOL,Diffusion_FE_120#1,q_len,30,-10.0,-10.0,-10.0,0.0,improved,1

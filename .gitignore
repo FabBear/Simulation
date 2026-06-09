@@ -10,3 +10,4 @@ spring-backend/build/
 spring-backend/.gradle/
 simulation/sample_csv/*.csv
 !simulation/sample_csv/.gitkeep
+simulation/out/

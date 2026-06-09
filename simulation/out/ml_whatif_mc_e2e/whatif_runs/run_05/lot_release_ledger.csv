@@ -1,7 +1,0 @@
-run_id,scenario_id,lot_id,lot_type,product_name,route_name,sim_now_min,due_date_sim_min,priority,is_super_hot,wafers_per_lot,source
-05e6c4ed807c,FWD_WHATIF_T26820_STRONG_R05,Lot_Product_3_532,Regular_Lot_3,Product_3,Route_Product_3,26827.109999999786,101194.244,10,0,25,mes_plan
-05e6c4ed807c,FWD_WHATIF_T26820_STRONG_R05,Lot_Product_4_532,Regular_Lot_4,Product_4,Route_Product_4,26827.109999999786,69416.74333333333,10,0,25,mes_plan
-05e6c4ed807c,FWD_WHATIF_T26820_STRONG_R05,Lot_Product_3_533,Regular_Lot_3,Product_3,Route_Product_3,26878.799999999785,101245.93400000001,10,0,25,mes_plan
-05e6c4ed807c,FWD_WHATIF_T26820_STRONG_R05,Lot_Product_4_533,Regular_Lot_4,Product_4,Route_Product_4,26878.799999999785,69468.43333333333,10,0,25,mes_plan
-05e6c4ed807c,FWD_WHATIF_T26820_STRONG_R05,Lot_Product_3_534,Regular_Lot_3,Product_3,Route_Product_3,26930.489999999783,101297.62400000001,10,0,25,mes_plan
-05e6c4ed807c,FWD_WHATIF_T26820_STRONG_R05,Lot_Product_4_534,Regular_Lot_4,Product_4,Route_Product_4,26930.489999999783,69520.12333333332,10,0,25,mes_plan

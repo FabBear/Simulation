@@ -1,5 +1,10 @@
 # Backend handoff — KPI level tables (Flyway V6)
 
+## PostgreSQL schema (platform SSOT)
+
+Python simulation platform uses schema **`simulation`** (env: `POSTGRES_SCHEMA=simulation`).  
+Backend/service tables may remain in **`public`**. Qualified names: `simulation.kpi_fab`, `simulation.mes_scenario`, etc.
+
 ## Summary
 
 `kpi_snapshot` single table (with `level` column) is replaced by four physical tables:

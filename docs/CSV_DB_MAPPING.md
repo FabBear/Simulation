@@ -3,6 +3,14 @@
 FabEnv가 `sim_csv_out`에 쓰는 CSV 7종과 PostgreSQL 로그 테이블의 컬럼 대응입니다.  
 적재 스크립트: `simulation/load_csv_to_db.py` · 매핑 코드: `simulation/csv_db_mapping.py`
 
+## PostgreSQL schema
+
+| 항목 | 값 |
+|------|-----|
+| Platform SSOT | `POSTGRES_SCHEMA=simulation` (`simulation/schema_config.py`) |
+| Local default port | `5433` (`FAB_BEAR/.env`) |
+| Qualified example | `simulation.kpi_tool`, `simulation.lot_event_log` |
+
 ## run_id 정책 (옵션 A)
 
 | 항목 | 설명 |

@@ -25,7 +25,8 @@ from csv_db_mapping import (  # noqa: E402
 )
 from sqlalchemy.exc import ProgrammingError  # noqa: E402
 
-from database import SessionLocal, engine  # noqa: E402
+from database import SessionLocal, engine, ensure_schema  # noqa: E402
+from schema_config import qualified_table  # noqa: E402
 from models import (  # noqa: E402
     KpiFab,
     KpiProcess,
@@ -67,8 +68,8 @@ def _sql_without_line_comments(stmt: str) -> str:
 def _drop_legacy_kpi_snapshot(conn) -> None:
     """Remove pre-V6 kpi_snapshot TABLE or compatibility VIEW (wrong-type DROP is OK)."""
     for ddl in (
-        "DROP VIEW IF EXISTS kpi_snapshot CASCADE",
-        "DROP TABLE IF EXISTS kpi_snapshot CASCADE",
+        f"DROP VIEW IF EXISTS {qualified_table('kpi_snapshot')} CASCADE",
+        f"DROP TABLE IF EXISTS {qualified_table('kpi_snapshot')} CASCADE",
     ):
         try:
             conn.execute(text(ddl))
@@ -83,6 +84,7 @@ def _apply_schema_sql() -> None:
         if not sql_path.is_file():
             raise FileNotFoundError(f"Missing migration SQL: {sql_path}")
         with engine.begin() as conn:
+            ensure_schema(conn)
             if name == "V6__kpi_level_tables.sql":
                 _drop_legacy_kpi_snapshot(conn)
             for stmt in sql_path.read_text(encoding="utf-8").split(";"):

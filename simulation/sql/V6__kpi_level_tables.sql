@@ -1,3 +1,8 @@
+-- Platform SSOT schema (POSTGRES_SCHEMA=simulation)
+CREATE SCHEMA IF NOT EXISTS simulation;
+SET search_path TO simulation;
+
+
 -- V6__kpi_level_tables.sql
 -- Split legacy kpi_snapshot TABLE into four level-specific tables (CSV 1:1).
 -- Legacy kpi_snapshot (table or view) is dropped in load_csv_to_db._drop_legacy_kpi_snapshot.

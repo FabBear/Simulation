@@ -10,12 +10,12 @@ cd /path/to/FAB_BEAR
 docker compose up -d db
 ```
 
-- `FAB_BEAR/.env`의 `POSTGRES_*` 값을 사용합니다.
-- Spring Flyway는 **선택** (`spring-backend/` 보관). Python만 쓸 때는 `init_db.py`가 ORM 테이블을 생성합니다.
+- `FAB_BEAR/.env`의 `POSTGRES_*` 값을 사용합니다 (`POSTGRES_SCHEMA=simulation` — 플랫폼 테이블 namespace).
+- Spring Flyway는 **선택** (`spring-backend/` 보관). Python만 쓸 때는 `init_db.py`가 ORM 테이블을 **`simulation` 스키마**에 생성합니다.
 
 ### 스키마 운영 규칙
 
-- **스키마 SSOT**: `simulation/models.py`
+- **스키마 SSOT**: `simulation/models.py` + `POSTGRES_SCHEMA=simulation`
 - **`init_db.py`는 `drop_all` 포함** — 전용 개발 DB 권장. Spring Flyway와 같은 DB를 쓰지 마세요.
 - **순서**: `docker compose up -d db` → `simulation/init_db.py` → `run_sim_csv_once.py`
 

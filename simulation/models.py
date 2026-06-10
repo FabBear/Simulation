@@ -6,13 +6,17 @@ from sqlalchemy import (
     ForeignKey, BigInteger, UniqueConstraint, Index,
 )
 from datetime import datetime
+from sqlalchemy import MetaData
 from sqlalchemy.orm import declarative_base  # .ext.declarative 대신 .orm 사용
 try:
     from sqlalchemy.dialects.postgresql import JSONB
 except ImportError:
     JSONB = Text  # fallback for non-Postgres dev
-# 2. 설계도 용지를 한 장 꺼냅니다. (이게 있어야 설계를 시작합니다)
-Base = declarative_base()
+
+from schema_config import DB_SCHEMA
+
+# 2. 설계도 용지를 한 장 꺼냅니다. (POSTGRES_SCHEMA, default simulation)
+Base = declarative_base(metadata=MetaData(schema=DB_SCHEMA or None))
 
 # -----------------------------------------------------------
 # [설계도 1] 장비(Machine) 테이블 설계도

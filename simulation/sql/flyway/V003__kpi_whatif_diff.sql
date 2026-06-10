@@ -1,3 +1,8 @@
+-- Platform SSOT schema (POSTGRES_SCHEMA=simulation)
+CREATE SCHEMA IF NOT EXISTS simulation;
+SET search_path TO simulation;
+
+
 -- FAB_BEAR V003: kpi_whatif_diff — WHAT-IF vs baseline KPI delta (simulation output)
 -- Filled by tools/compare_whatif.py (or runner) after a WHATIF run completes.
 

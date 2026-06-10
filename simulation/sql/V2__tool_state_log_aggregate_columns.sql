@@ -1,3 +1,8 @@
+-- Platform SSOT schema (POSTGRES_SCHEMA=simulation)
+CREATE SCHEMA IF NOT EXISTS simulation;
+SET search_path TO simulation;
+
+
 -- Tool group–level aggregate columns for tool_state_log (FabEnv aggregate logging).
 --
 -- NOTE (2026-05): This standalone patch is now superseded by the Spring Flyway

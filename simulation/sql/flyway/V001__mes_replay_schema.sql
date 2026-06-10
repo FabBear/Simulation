@@ -1,3 +1,8 @@
+-- Platform SSOT schema (POSTGRES_SCHEMA=simulation)
+CREATE SCHEMA IF NOT EXISTS simulation;
+SET search_path TO simulation;
+
+
 -- FAB_BEAR MES schedule REPLAY input schema
 -- Apply after master tables (toolgroup, process_step, ...) exist.
 -- FabEnv: DISPATCH_MODE=mes_replay (future) reads mes_* tables; does not use lot_release.

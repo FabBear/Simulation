@@ -1,4 +1,5 @@
 # FAB_BEAR — PostgreSQL only (Python batch sim + optional init_db)
+# Platform ORM/raw SQL SSOT: POSTGRES_SCHEMA=simulation (see simulation/schema_config.py)
 services:
   db:
     image: postgres:16

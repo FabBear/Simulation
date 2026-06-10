@@ -1,3 +1,8 @@
+-- Platform SSOT schema (POSTGRES_SCHEMA=simulation)
+CREATE SCHEMA IF NOT EXISTS simulation;
+SET search_path TO simulation;
+
+
 -- Mirror of spring-backend Flyway V5 (apply via load_csv_to_db.py or manual psql)
 
 CREATE TABLE IF NOT EXISTS simulation_run (

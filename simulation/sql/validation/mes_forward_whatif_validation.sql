@@ -1,3 +1,8 @@
+-- Platform SSOT schema (POSTGRES_SCHEMA=simulation)
+CREATE SCHEMA IF NOT EXISTS simulation;
+SET search_path TO simulation;
+
+
 -- MES FORWARD / WHAT-IF validation queries
 -- Replace :scenario_id with actual id (e.g. FWD_001)
 

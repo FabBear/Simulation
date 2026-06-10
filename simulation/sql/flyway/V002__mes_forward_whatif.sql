@@ -1,3 +1,8 @@
+-- Platform SSOT schema (POSTGRES_SCHEMA=simulation)
+CREATE SCHEMA IF NOT EXISTS simulation;
+SET search_path TO simulation;
+
+
 -- FAB_BEAR MES schema V2: FORWARD / WHAT-IF (REPLAY deprecated)
 -- Requires V001 applied. Migrates replay schedule grid → forward sparse inputs.
 

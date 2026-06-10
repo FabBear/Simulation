@@ -7,7 +7,14 @@ from collections import defaultdict
 import pytest
 
 from csv_db_mapping import CSV_TO_TABLE, KPI_FILE_TO_TABLE, map_csv_row
-from models import KpiFab, KpiProcess, KpiTool, KpiToolgroup, KPI_LEVEL_MODELS
+from models import KpiFab, KpiProcess, KpiTool, KpiToolgroup, KPI_LEVEL_MODELS, MesScenario
+from schema_config import DB_SCHEMA
+
+
+def test_orm_models_use_simulation_schema():
+    assert KpiTool.__table__.schema == DB_SCHEMA
+    assert MesScenario.__table__.schema == DB_SCHEMA
+    assert DB_SCHEMA == "simulation"
 
 
 def test_kpi_csv_maps_to_level_tables():
@@ -66,8 +73,12 @@ def test_kpi_level_tables_exist_in_db():
     from sqlalchemy import inspect
 
     from database import engine
+    from schema_config import DB_SCHEMA
 
     insp = inspect(engine)
-    missing = [n for n in ("kpi_fab", "kpi_process", "kpi_toolgroup", "kpi_tool") if not insp.has_table(n)]
+    missing = [
+        n for n in ("kpi_fab", "kpi_process", "kpi_toolgroup", "kpi_tool")
+        if not insp.has_table(n, schema=DB_SCHEMA)
+    ]
     if missing:
         pytest.skip(f"V6 tables not applied yet (missing: {missing}); run Flyway V6 or load_csv_to_db")

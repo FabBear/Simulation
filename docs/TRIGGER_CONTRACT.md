@@ -7,6 +7,10 @@ The engine itself is **trigger-agnostic**: it only consumes rows in Postgres and
 runs them when their status is `VALIDATED`. Anything that creates those rows is
 "a trigger".
 
+**DB schema:** platform tables live in PostgreSQL schema **`simulation`**
+(`POSTGRES_SCHEMA=simulation`, local port **5433**). Agent/backend tools must use
+the same env (see `simulation/schema_config.py`).
+
 ---
 
 ## Roles

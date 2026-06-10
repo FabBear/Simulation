@@ -1,3 +1,8 @@
+-- Platform SSOT schema (POSTGRES_SCHEMA=simulation)
+CREATE SCHEMA IF NOT EXISTS simulation;
+SET search_path TO simulation;
+
+
 -- V006__kpi_level_tables.sql (Python flyway mirror of simulation/sql/V6__kpi_level_tables.sql)
 
 CREATE TABLE IF NOT EXISTS kpi_fab (

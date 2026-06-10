@@ -1,3 +1,8 @@
+-- Platform SSOT schema (POSTGRES_SCHEMA=simulation)
+CREATE SCHEMA IF NOT EXISTS simulation;
+SET search_path TO simulation;
+
+
 -- Example FORWARD scenario: T0=10800, horizon=180min
 -- Adjust route_id / tool_group to match your init_db master data.
 

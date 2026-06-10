@@ -1,3 +1,8 @@
+-- Platform SSOT schema (POSTGRES_SCHEMA=simulation)
+CREATE SCHEMA IF NOT EXISTS simulation;
+SET search_path TO simulation;
+
+
 -- Example: T0=10800 (180h), horizon=180min, 3 lots, 2 tools (Litho_FE#1, Litho_FE#2)
 -- Requires master routes/steps to exist for route_id used (adjust route_id to your DB).
 

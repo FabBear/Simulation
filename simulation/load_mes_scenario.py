@@ -92,7 +92,11 @@ def _upsert_scenario(db, args) -> MesScenario:
     prev_status = sc.status if sc else None
     trigger = None
     if args.trigger_meta:
-        trigger = json.loads(Path(args.trigger_meta).read_text(encoding="utf-8")) if Path(args.trigger_meta).is_file() else json.loads(args.trigger_meta)
+        try:
+            _is_file = Path(args.trigger_meta).is_file()
+        except OSError:
+            _is_file = False
+        trigger = json.loads(Path(args.trigger_meta).read_text(encoding="utf-8")) if _is_file else json.loads(args.trigger_meta)
     if not sc:
         sc = MesScenario(scenario_id=args.scenario_id)
         db.add(sc)

@@ -311,8 +311,6 @@ if __name__ == "__main__":
     # 주의: 안에 들어있던 데이터도 다 날아갑니다 (어차피 엑셀에서 다시 넣으면 됩니다).
     from models import Base
     from database import engine
-    print("🗑️ 기존 테이블 삭제 중...")
-    Base.metadata.drop_all(bind=engine) 
 
     # 1. 테이블 생성 (이제 깨끗한 상태에서 올바르게 다시 만듭니다)
     print("🏗️ 테이블 새로 생성 중...")

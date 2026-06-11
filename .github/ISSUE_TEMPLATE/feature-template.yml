@@ -1,0 +1,65 @@
+name: "✨ Feature"
+description: 새로운 ML 기능, 모델, 데이터, 파이프라인 작업을 요청합니다.
+title: "[FEAT] "
+labels: ["✨ Feature"]
+
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: "대상 영역"
+      options:
+        - "Data"
+        - "Model"
+        - "Experiment"
+        - "Training Pipeline"
+        - "Inference Pipeline"
+        - "MLflow / Monitoring"
+        - "Infra/CI/CD"
+        - "Docs"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: work_type
+    attributes:
+      label: "작업 유형"
+      options:
+        - "신규 구현"
+        - "성능 개선"
+        - "데이터 개선"
+        - "실험 추가"
+        - "운영/모니터링 개선"
+    validations:
+      required: true
+
+  - type: textarea
+    id: feature
+    attributes:
+      label: "작업 설명"
+      description: "무엇을 왜 추가하거나 개선하는지 핵심만 작성해 주세요."
+      value: |
+        - 목적:
+        - 대상 데이터/모델:
+        - 기대 결과:
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: "완료 조건"
+      description: "완료 판단 기준을 체크리스트로 작성해 주세요."
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional_info
+    attributes:
+      label: "추가 정보"
+      description: "데이터셋 경로, 실험 링크, 참고 문서가 있다면 작성해 주세요."
+    validations:
+      required: false

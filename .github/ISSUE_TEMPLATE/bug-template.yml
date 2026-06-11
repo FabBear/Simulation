@@ -1,0 +1,71 @@
+name: "🐞 BugFix"
+description: ML 코드, 데이터, 모델, 파이프라인 오류를 보고합니다.
+title: "[BUG] "
+labels: ["🐞 BugFix"]
+
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: "발생 영역"
+      options:
+        - "Data"
+        - "Model"
+        - "Experiment"
+        - "Training Pipeline"
+        - "Inference Pipeline"
+        - "MLflow / Monitoring"
+        - "Infra/CI/CD"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: "영향도"
+      options:
+        - "Blocker"
+        - "Major"
+        - "Minor"
+    validations:
+      required: true
+
+  - type: textarea
+    id: bug_reproduction
+    attributes:
+      label: "버그 재현 방법"
+      description: "실행 명령, 데이터/모델 버전, 발생 조건을 순서대로 작성해 주세요."
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: "기대 동작 / 실제 동작"
+      description: "정상 동작과 현재 문제를 비교해 주세요."
+      value: |
+        - 기대 동작:
+        - 실제 동작:
+    validations:
+      required: true
+
+  - type: textarea
+    id: error_log
+    attributes:
+      label: "에러 로그 / 지표"
+      description: "스택트레이스, 실패 로그, 비정상 지표를 작성해 주세요."
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_info
+    attributes:
+      label: "추가 정보"
+      description: "추가로 공유할 내용이 있다면 자유롭게 작성해 주세요."
+    validations:
+      required: false

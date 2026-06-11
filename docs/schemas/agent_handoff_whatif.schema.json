@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agent_handoff_whatif",
+  "type": "object",
+  "required": ["version", "pipeline", "target_agent", "whatif"],
+  "properties": {
+    "version": { "type": "string" },
+    "pipeline": { "const": "whatif" },
+    "target_agent": { "const": "whatif_verification" },
+    "monte_carlo": {
+      "type": "object",
+      "properties": {
+        "n_runs": { "type": "integer" },
+        "template_scenario_id": { "type": "string" },
+        "suffix_pattern": { "type": ["string", "null"] },
+        "execution_mode": { "enum": ["parallel", "serial"] },
+        "clone_manifest": { "type": ["string", "null"] }
+      }
+    },
+    "whatif": {
+      "type": "object",
+      "required": [
+        "baseline_scenario_id",
+        "whatif_scenario_id",
+        "paired_n",
+        "whatif_paired_results",
+        "level"
+      ],
+      "properties": {
+        "baseline_scenario_id": { "type": "string" },
+        "whatif_scenario_id": { "type": "string" },
+        "paired_n": { "type": "integer", "minimum": 1 },
+        "level": { "type": "string" },
+        "whatif_paired_results": {
+          "type": "array",
+          "description": "Primary Agent input: paired t-test results (D_i = whatif_i - baseline_i) per scope x KPI.",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["level", "scope", "kpi_name", "paired_n", "mean_delta", "verdict"],
+            "properties": {
+              "level": { "type": "string" },
+              "scope": { "type": "string" },
+              "kpi_name": { "type": "string" },
+              "paired_n": { "type": "integer" },
+              "mean_delta": { "type": "number" },
+              "ci_lo": { "type": "number" },
+              "ci_hi": { "type": "number" },
+              "paired_t_p": { "type": ["number", "null"] },
+              "verdict": { "enum": ["improved", "worsened", "unchanged"] },
+              "nonzero_delta": { "type": "integer" }
+            }
+          }
+        },
+        "paired_manifest": { "type": "string" },
+        "baseline_reused_from": { "type": "string" }
+      }
+    }
+  }
+}

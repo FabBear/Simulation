@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+pandas
+numpy
+openpyxl
+simpy
+gymnasium
+stable-baselines3
+scipy
+statsmodels
+pytest

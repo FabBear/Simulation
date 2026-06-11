@@ -1,85 +1,67 @@
-# fabBear MLOps
+# FAB_BEAR
 
-MLOps 저장소 협업 규칙입니다.
+FabGuard PoC용 **배치 시뮬 + CSV/KPI 파이프라인** 분리 프로젝트입니다.  
+원본: `Final_Project/Simulation` (프론트/K8s 제외).
 
-## Branch Strategy
+## 구조
 
-```
-main       ← 배포용 브랜치 (직접 push 금지)
- └─ dev    ← 개발 통합 브랜치
-     └─ feat/#12-anomaly-detection-pipeline
-     └─ fix/#24-data-preprocessing-bug
-     └─ exp/#31-hyperparameter-tuning
-```
-
-브랜치 이름은 `타입/#이슈번호-설명` 형식으로 작성합니다.
-
-| 타입       | 설명                                      |
-| ---------- | ----------------------------------------- |
-| `feat`     | 신규 기능 또는 파이프라인 구현            |
-| `fix`      | 버그 수정                                 |
-| `exp`      | 모델 실험 및 하이퍼파라미터 탐색          |
-| `data`     | 데이터 수집, 전처리, 검증                 |
-| `refactor` | 코드 구조 개선                            |
-| `chore`    | 빌드, 패키지, CI/CD 등 관리 작업          |
-
----
-
-## Commit Convention
-
-```
-[타입] 작업 내용 요약
+```text
+FAB_BEAR/
+  simulation/          # FabEnv, run_sim_csv_once.py, init_db.py, data/
+  spring-backend/      # 보관용 (당장 미사용 가능)
+  docs/README_DOCKER.md
+  docker-compose.yml   # Postgres only
+  .env.example
 ```
 
-| 타입         | 설명                        | 예시                                              |
-| ------------ | --------------------------- | ------------------------------------------------- |
-| `[FEAT]`     | 신규 기능 또는 파이프라인   | `[FEAT] 공정 이상 감지 학습 파이프라인 구현`      |
-| `[FIX]`      | 버그 수정                   | `[FIX] LOT 이벤트 전처리 누락 케이스 수정`        |
-| `[MODEL]`    | 모델 구조 또는 알고리즘 변경| `[MODEL] XGBoost → LightGBM 교체`                 |
-| `[DATA]`     | 데이터 처리 관련 변경       | `[DATA] tool_state 이상치 제거 로직 추가`          |
-| `[EXP]`      | 실험 결과 또는 설정 추가    | `[EXP] 하이퍼파라미터 튜닝 결과 추가`             |
-| `[REFACTOR]` | 코드 리팩토링               | `[REFACTOR] 전처리 모듈 분리`                     |
-| `[CHORE]`    | 빌드, 패키지, 설정 관리     | `[CHORE] 불필요한 의존성 제거`                    |
-| `[HOTFIX]`   | 긴급 수정                   | `[HOTFIX] 모델 서빙 엔드포인트 오류 수정`         |
+## 빠른 시작
 
-**규칙**
+```bash
+cd /path/to/FAB_BEAR
+cp .env.example .env
+docker compose up -d db
 
-- 제목은 명령문·현재형으로 작성합니다.
-- 한 커밋에 하나의 논리적 변경만 담습니다.
-- 제목은 50자 이내로 작성합니다.
+cd simulation
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python init_db.py    # 전용 DB 권장 (drop_all). ProcessStep CQT 컬럼 변경 시 재실행 필수
 
----
-
-## Issue Convention
-
-```
-[타입] 작업 내용 요약
+export SIM_CSV_DIR=./sim_csv_out
+export SIM_END_MINUTES=2000
+export KPI_INSTANT_PERIOD_MIN=60
+.venv/bin/python run_sim_csv_once.py --csv-dir ./sim_csv_out --end-minutes 2000 --max-steps 500
 ```
 
-| 타입       | 설명                                  |
-| ---------- | ------------------------------------- |
-| ✨ Feature | 신규 기능 또는 파이프라인 구현        |
-| 🐞 BugFix  | 오류, 예외 상황                       |
-| 🔬 Experiment | 모델 실험 및 성능 탐색             |
-| 🧹 Chore   | 설정, 빌드, 의존성 등 관리 작업       |
+출력 CSV 7종: `simulation_process`, `lot_events`, `tool_state`, `kpi_fab`, `kpi_process`, `kpi_toolgroup`, `kpi_tool`.
 
-> 이슈를 등록하면 작성자가 자동으로 assignee로 지정됩니다.
+### CSV → DB 적재
 
----
-
-## PR Convention
-
-PR 제목은 커밋 타입과 동일한 prefix를 사용합니다.
-
-```
-[FEAT] #12 공정 이상 감지 학습 파이프라인 구현
-[MODEL] #18 앙상블 모델 추가
-[DATA] #24 LOT 이벤트 전처리 스크립트 추가
+```bash
+cd simulation
+.venv/bin/python load_csv_to_db.py --csv-dir ./sim_csv_out
+# 기존 run_id 덮어쓰기: --truncate-run
 ```
 
-**규칙**
+매핑 상세: [docs/CSV_DB_MAPPING.md](docs/CSV_DB_MAPPING.md)  
+KPI 4종 CSV 가이드: [docs/KPI_CSV_4FILES.md](docs/KPI_CSV_4FILES.md)
 
-- **Draft PR**: 작업 중이면 Draft로 생성합니다.
-- **이슈 연결**: `Close #이슈번호`를 반드시 작성합니다.
-- **셀프 머지 금지**: 본인이 작성한 PR은 본인이 merge하지 않습니다.
-- **리뷰 요청**: Ready for Review 전환 후 리뷰어를 지정합니다.
+## 환경 파일
+
+`simulation/database.py` loads (in order):
+
+1. `FAB_BEAR/.env`
+2. `Final_Project/.env` (parent of FAB_BEAR)
+
+## 제외된 것 (원본 Simulation에만 있음)
+
+- `fab-dashboard/`, `ingress.yaml`, K8s manifests
+- PPO `logs/*.zip`
+- `SMT_2020 - Final/` AutoSched 데이터
+- `backend_manager.py`, `main_api.py` (Digital Twin API)
+- V1 MES REPLAY schedule grid (`mes_schedule_event` TRACK_IN) — see V2 `docs/MES_FORWARD_WHATIF_SCHEMA.md`
+
+## 다음 단계
+
+What-if 시뮬: `simulation/core/`, `simulation/schemas/` (스냅샷 + action + 부분 스케줄 + KPI).
+
+자세한 실행·Docker: [docs/README_DOCKER.md](docs/README_DOCKER.md) · KPI: [docs/KPI_CSV_4FILES.md](docs/KPI_CSV_4FILES.md)

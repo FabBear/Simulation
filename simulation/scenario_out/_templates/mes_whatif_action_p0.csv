@@ -1,0 +1,7 @@
+seq,action_kind,effective_time,lot_id,route_id,step_seq,tool_group,tool_id,payload_json,source
+0,LOT_HOLD,10080.0,Lot_Upstream_01,,,,"{""reason"":""relieve_bottleneck""}",AGENT
+1,LOT_PRIORITY,10080.0,Lot_Urgent_02,,,,"{""priority"":99}",AGENT
+2,DISPATCH_RULE_OVERRIDE,10080.0,,,Litho_FE_111,,"{""tool_group"":""Litho_FE_111"",""dispatch_rule"":""superhotlot setupavoidance""}",AGENT
+3,SKIP_RELEASE,10080.0,,,,,"{""mes_lot_release_plan_id"":1}",AGENT
+4,FORCE_TOOL,10080.0,Lot_Pin_03,,,Litho_FE_111,Litho_FE_111#2,"{""tool_id"":""Litho_FE_111#2"",""tool_group"":""Litho_FE_111"",""once"":true}",AGENT
+5,LOT_RELEASE,10110.0,Lot_Upstream_01,,,,{},AGENT

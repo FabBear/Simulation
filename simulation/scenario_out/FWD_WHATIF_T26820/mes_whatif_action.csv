@@ -1,0 +1,6 @@
+seq,action_kind,effective_time,lot_id,route_id,step_seq,tool_group,tool_id,payload_json,source
+0,LOT_HOLD,26820.0,Lot_Product_4_160,,,,,"{""reason"":""e2e_relieve_bottleneck""}",E2E
+1,LOT_PRIORITY,26820.0,HotLot_3,,,,,"{""priority"":99}",E2E
+2,DISPATCH_RULE_OVERRIDE,26820.0,,,,Diffusion_FE_120,,"{""tool_group"":""Diffusion_FE_120"",""dispatch_rule"":""superhotlot setupavoidance""}",E2E
+3,FORCE_TOOL,26820.0,Lot_Product_4_17,,,Diffusion_FE_120,Diffusion_FE_120#2,"{""tool_id"":""Diffusion_FE_120#2"",""tool_group"":""Diffusion_FE_120"",""once"":true}",E2E
+4,LOT_RELEASE,26850.0,Lot_Product_4_160,,,,,"{}",E2E

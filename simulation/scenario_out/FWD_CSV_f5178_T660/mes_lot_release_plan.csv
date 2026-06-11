@@ -1,0 +1,7 @@
+scenario_id,product_name,route_name,release_time,lots_count,release_interval,due_date_sim,wafers_per_lot,priority,is_super_hot,lot_type,lot_name_prefix,source_lot_release_id
+FWD_CSV_f5178_T660,Product_3,Route_Product_3,671.97,1,0,75039.104,25,30,true,Lot_Product_3_16,,
+FWD_CSV_f5178_T660,Product_4,Route_Product_4,671.97,1,0,43261.60333333333,25,20,false,Lot_Product_4_15,,
+FWD_CSV_f5178_T660,Product_3,Route_Product_3,723.6600000000001,1,0,75090.79400000001,25,30,true,Lot_Product_3_17,,
+FWD_CSV_f5178_T660,Product_4,Route_Product_4,723.6600000000001,1,0,43313.293333333335,25,20,false,Lot_Product_4_16,,
+FWD_CSV_f5178_T660,Product_3,Route_Product_3,775.3500000000001,1,0,75142.48400000001,25,30,true,Lot_Product_3_18,,
+FWD_CSV_f5178_T660,Product_4,Route_Product_4,775.3500000000001,1,0,43364.98333333333,25,20,false,Lot_Product_4_17,,

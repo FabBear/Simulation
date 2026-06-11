@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agent_handoff_g_star_analysis",
+  "type": "object",
+  "required": ["version", "pipeline", "target_agent", "g_star_analysis"],
+  "properties": {
+    "version": { "type": "string" },
+    "pipeline": { "const": "g_star_analysis" },
+    "target_agent": { "const": "root_cause" },
+    "monte_carlo": {
+      "type": "object",
+      "properties": {
+        "n_runs": { "type": "integer" },
+        "template_scenario_id": { "type": ["string", "null"] },
+        "suffix_pattern": { "type": ["string", "null"] },
+        "execution_mode": { "enum": ["parallel", "serial"] },
+        "clone_manifest": { "type": ["string", "null"] }
+      }
+    },
+    "g_star_toolgroups": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "g_star_analysis": {
+      "type": "object",
+      "required": [
+        "anchor_tg",
+        "analysis_rule",
+        "g_star_toolgroups",
+        "g_star_kpi_evidence",
+        "significance_alpha",
+        "independence_test",
+        "fdr_scope",
+        "kpis",
+        "multipletest"
+      ],
+      "properties": {
+        "analysis_rule": { "const": "ttest_g_star_analysis" },
+        "significance_alpha": { "type": "number" },
+        "independence_test": { "const": "ljung_box" },
+        "independence_alpha": { "type": "number" },
+        "lb_lags": { "type": "integer" },
+        "n_diff_baseline": { "type": "integer" },
+        "n_runs_forward": { "type": "integer" },
+        "fdr_scope": { "const": "g_star_x_kpi" },
+        "fdr_n_hypotheses": { "type": "integer" },
+        "kpis": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "multipletest": {
+          "enum": ["fdr_bh", "bonferroni", "none"]
+        },
+        "g_star_toolgroups": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "g_star_kpi_evidence": {
+          "type": "array",
+          "description": "Primary Agent input: G* x KPI Welch t-test + Ljung-Box + FDR evidence rows.",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["toolgroup", "kpi", "status"],
+            "properties": {
+              "toolgroup": { "type": "string" },
+              "kpi": { "type": "string" },
+              "direction": { "type": "string" },
+              "n_base": { "type": ["integer", "null"] },
+              "n_fwd": { "type": ["integer", "null"] },
+              "mean_base": { "type": ["number", "null"] },
+              "mean_fwd": { "type": ["number", "null"] },
+              "delta_mean": { "type": ["number", "null"] },
+              "lb_pvalue": { "type": ["number", "null"] },
+              "lb_independent": { "type": ["integer", "null"] },
+              "t_stat": { "type": ["number", "null"] },
+              "t_p": { "type": ["number", "null"] },
+              "t_p_adj": { "type": ["number", "null"] },
+              "kpi_significant": { "type": ["integer", "null"] },
+              "status": { "type": "string" },
+              "anchor_tg": { "type": "string" }
+            }
+          }
+        },
+        "baseline_csv_dir": { "type": "string" },
+        "runs_manifest": { "type": "string" },
+        "anchor_tg": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "run_id": "f5178b41645d",
+  "t0": 660.0,
+  "horizon": 180.0,
+  "wip_count": 49,
+  "queue_count": 0,
+  "release_count": 6,
+  "tool_count": 1535,
+  "notes": [
+    "queue Diffusion_FE_120#1: 38 candidates vs kpi q_len=0; trimmed",
+    "queue Diffusion_FE_125#1: 3 candidates vs kpi q_len=0; trimmed",
+    "queue Diffusion_FE_127#1: 3 candidates vs kpi q_len=0; trimmed"
+  ]
+}

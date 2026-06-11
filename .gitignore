@@ -4,14 +4,25 @@
 !.env.example
 
 # Python
-__pycache__/
-*.py[cod]
+**/__pycache__/
+**/*.pyc
+simulation/.venv/
 .venv/
 venv/
 env/
 *.egg-info/
 dist/
 .eggs/
+
+# Simulation & Backend
+simulation/sim_csv_out/
+simulation/sim_csv_*/
+simulation/logs/
+simulation/out/
+simulation/sample_csv/*.csv
+!simulation/sample_csv/.gitkeep
+spring-backend/build/
+spring-backend/.gradle/
 
 # Jupyter
 .ipynb_checkpoints/

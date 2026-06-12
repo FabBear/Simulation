@@ -81,10 +81,20 @@ def load_and_merge_data(run_id: str) -> pd.DataFrame:
         tool_long["snapshot_time"] = tool_long["snapshot_time"].astype(float)
         tool_combined = tool_long.groupby(["snapshot_time", "toolgroup", "kpi_name"], as_index=False)["value"].max()
     else:
-        tool_combined = pd.DataFrame(columns=["snapshot_time", "toolgroup", "kpi_name", "value"])
+        tool_combined = pd.DataFrame({
+            "snapshot_time": pd.Series(dtype=float),
+            "toolgroup": pd.Series(dtype=str),
+            "kpi_name": pd.Series(dtype=str),
+            "value": pd.Series(dtype=float)
+        })
         
     tool_agg = tool_combined.pivot(index=["snapshot_time", "toolgroup"], columns="kpi_name", values="value").reset_index()
     tool_agg = tool_agg.rename(columns=TOOL_KPIS)
+
+    if "snapshot_time" in tool_agg.columns:
+        tool_agg["snapshot_time"] = tool_agg["snapshot_time"].astype(float)
+    if "snapshot_time" in tg_wide.columns:
+        tg_wide["snapshot_time"] = tg_wide["snapshot_time"].astype(float)
 
     wide = tg_wide.merge(tool_agg, on=["snapshot_time", "toolgroup"], how="left")
     wide["max_util"] = wide["max_util"].fillna(0.0)
@@ -171,9 +181,17 @@ def preprocess_data():
     """전체 데이터 전처리 파이프라인을 실행합니다."""
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     
-    # [MLOps] DB에서 가져올 특정 run_id 지정
-    target_run_id = 'ece173272af7'
+    # [MLOps] DB에서 최신 run_id를 자동으로 조회하여 사용 (하드코딩 제거)
+    with engine.connect() as conn:
+        latest_run = conn.execute(text("SELECT run_id FROM simulation_run ORDER BY imported_at DESC LIMIT 1")).scalar()
+        target_run_id = latest_run if latest_run else 'ece173272af7'
+        
+    print(f"Target Run ID: {target_run_id}")
+    
     df_wide = load_and_merge_data(target_run_id)
+    if df_wide.empty:
+        raise ValueError(f"Run ID '{target_run_id}'에 해당하는 데이터가 DB에 없습니다.")
+
     report_thr = compute_report_thresholds(df_wide)
     df_processed = process_features_and_labels(df_wide, report_thr)
     

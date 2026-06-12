@@ -48,7 +48,7 @@ def load_and_merge_data(run_id: str) -> pd.DataFrame:
     # [MLOps] public.kpi_toolgroup 테이블에서 필요한 데이터만 Raw SQL로 조회 (메모리 최적화)
     tg_query = text("""
         SELECT snapshot_time, scope AS toolgroup, kpi_name, value, window_minutes
-        FROM public.kpi_toolgroup
+        FROM kpi_toolgroup
         WHERE run_id = :run_id
     """)
     tg_long = pd.read_sql(tg_query, engine, params={"run_id": run_id})
@@ -70,7 +70,7 @@ def load_and_merge_data(run_id: str) -> pd.DataFrame:
     # 덕분에 청크(chunk) 처리가 불필요해지고 OOM 방지 및 성능이 크게 향상됨
     tool_query = text("""
         SELECT snapshot_time, scope, kpi_name, value
-        FROM public.kpi_tool
+        FROM kpi_tool
         WHERE run_id = :run_id
           AND kpi_name IN ('utilization', 'avg_q_time')
     """)

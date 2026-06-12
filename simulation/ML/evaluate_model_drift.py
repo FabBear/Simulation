@@ -8,7 +8,7 @@ import os
 DRIFT_THRESHOLD = 0.70
 
 # Jenkins 서버 정보 (보안을 위해 환경변수 사용 권장)
-JENKINS_URL = os.environ.get("JENKINS_URL", "http://your-jenkins-server:8080")
+JENKINS_URL = os.environ.get("JENKINS_URL", "http://your-jenkins-server:8081")
 JENKINS_JOB = "FabGuard-ML-Retrain-Pipeline"
 JENKINS_USER = os.environ.get("JENKINS_USER", "admin")
 JENKINS_TOKEN = os.environ.get("JENKINS_TOKEN", "your_api_token")

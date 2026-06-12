@@ -54,17 +54,29 @@ def run_training_pipeline():
         model.fit(_X_train, _y_train, eval_set=[(_X_val, _y_val)], verbose=50)
         
         # Threshold Sweep
-        print("Tuning Classification Threshold...")
+        print("Tuning Classification Threshold (Constraint: Precision >= 0.8 & Recall >= 0.8)...")
         val_proba = model.predict_proba(_X_val)[:, 1]
+        
         best_threshold, best_f1, best_precision = 0.5, 0.0, 0.0
+        fallback_threshold, fallback_f1, fallback_precision = 0.5, 0.0, 0.0
         
         for t in np.arange(0.05, 0.96, 0.05):
             pred = (val_proba >= t).astype(int)
             p, r, f1, _ = precision_recall_fscore_support(_y_val, pred, average="binary", zero_division=0)
-            if f1 > best_f1:
-                best_f1 = f1
-                best_precision = p
-                best_threshold = t
+            
+            # 안전장치: 조건(0.8)을 만족하는 값이 없을 경우를 대비해 절대적 최대 F1도 기록해둠
+            if f1 > fallback_f1:
+                fallback_f1, fallback_precision, fallback_threshold = f1, p, t
+                
+            # 타겟 조건: Precision과 Recall이 모두 0.8 이상인 후보 중 최대 F1-Score 탐색
+            if p >= 0.8 and r >= 0.8:
+                if f1 > best_f1:
+                    best_f1, best_precision, best_threshold = f1, p, t
+                    
+        # 조건을 만족하는 Threshold가 하나도 없었다면 Fallback 값 적용
+        if best_f1 == 0.0:
+            print("⚠️ Warning: Precision >= 0.8 및 Recall >= 0.8을 모두 만족하는 Threshold가 없습니다. 기존 최대 F1 기준으로 Fallback 합니다.")
+            best_f1, best_precision, best_threshold = fallback_f1, fallback_precision, fallback_threshold
                 
         print(f"Optimal Threshold found: {best_threshold:.2f} (F1-score: {best_f1:.4f})")
         mlflow.log_metric("ALARM_PROBA_THRESHOLD", best_threshold)

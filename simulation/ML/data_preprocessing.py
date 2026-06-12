@@ -45,13 +45,15 @@ def load_and_merge_data(run_id: str) -> pd.DataFrame:
     """PostgreSQL DB에서 특정 run_id의 TG 및 Tool 단위 KPI 데이터를 로드하고 wide 형식으로 병합합니다."""
     print(f"Loading TG data from DB for run_id='{run_id}'...")
     
-    # [MLOps] public.kpi_toolgroup 테이블에서 필요한 데이터만 Raw SQL로 조회 (메모리 최적화)
+    # [MLOps] simulation.kpi_toolgroup 테이블에서 필요한 데이터만 Raw SQL로 조회 (메모리 최적화)
     tg_query = text("""
         SELECT snapshot_time, scope AS toolgroup, kpi_name, value, window_minutes
-        FROM kpi_toolgroup
+        FROM simulation.kpi_toolgroup
         WHERE run_id = :run_id
     """)
-    tg_long = pd.read_sql(tg_query, engine, params={"run_id": run_id})
+    
+    with engine.connect() as conn:
+        tg_long = pd.read_sql(tg_query, conn, params={"run_id": run_id})
     tg_long["snapshot_time"] = tg_long["snapshot_time"].astype(float)
 
     instant = tg_long[tg_long["window_minutes"].isna() | (tg_long["window_minutes"] == "")]
@@ -70,11 +72,13 @@ def load_and_merge_data(run_id: str) -> pd.DataFrame:
     # 덕분에 청크(chunk) 처리가 불필요해지고 OOM 방지 및 성능이 크게 향상됨
     tool_query = text("""
         SELECT snapshot_time, scope, kpi_name, value
-        FROM kpi_tool
+        FROM simulation.kpi_tool
         WHERE run_id = :run_id
           AND kpi_name IN ('utilization', 'avg_q_time')
     """)
-    tool_long = pd.read_sql(tool_query, engine, params={"run_id": run_id})
+    
+    with engine.connect() as conn:
+        tool_long = pd.read_sql(tool_query, conn, params={"run_id": run_id})
     
     if not tool_long.empty:
         tool_long["toolgroup"] = tool_long["scope"].map(tool_id_to_toolgroup)
@@ -189,7 +193,7 @@ def preprocess_data():
     
     # [MLOps] 실제로 KPI 데이터가 존재하는 테이블(kpi_toolgroup)에서 최신 run_id를 조회
     with engine.connect() as conn:
-        latest_run = conn.execute(text("SELECT run_id FROM kpi_toolgroup ORDER BY snapshot_time DESC LIMIT 1")).scalar()
+        latest_run = conn.execute(text("SELECT run_id FROM simulation.kpi_toolgroup ORDER BY snapshot_time DESC LIMIT 1")).scalar()
         target_run_id = latest_run if latest_run else '82a6c5db26e7'
         
     print(f"Target Run ID: {target_run_id}")

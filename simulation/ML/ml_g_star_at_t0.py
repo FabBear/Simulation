@@ -39,6 +39,8 @@ def load_t0_data() -> pd.DataFrame:
 def run_inference():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     
+    # [MLOps] 공유 MLflow Tracking 서버로 연결 (미설정 시 로컬 5500 기본값)
+    mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5500"))
     print(f"Loading model '{MODEL_NAME}' from stage '{MODEL_STAGE}'...")
     model = mlflow.xgboost.load_model(MODEL_URI)
     

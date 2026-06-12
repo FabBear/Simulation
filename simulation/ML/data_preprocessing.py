@@ -10,6 +10,8 @@ sys.path.insert(0, str(_ROOT))
 # [MLOps] DB 연동을 위한 모듈 추가
 from sqlalchemy import text
 from database import engine
+# [MLOps] 학습/라이브 라벨 룰 단일 진실원 (label_predictions.py와 공유)
+from label_rule import apply_label_rule
 
 CSV_DIR = _ROOT / "sim_csv_out"
 OUT_DIR = Path(__file__).resolve().parent / "processed_data"
@@ -128,16 +130,11 @@ def process_features_and_labels(df: pd.DataFrame, report_thr: pd.Series) -> pd.D
     future["snapshot_time"] = future["snapshot_time"] - LOOKAHEAD_MIN
     df = df.merge(future, on=keys, how="inner")
 
-    q, q_max = report_thr["Q"], report_thr["Q_MAX"]
-    w, wip_thr = report_thr["W"], report_thr["WIP"]
-    a, u_hi, u_lo = report_thr["A"], report_thr["U_HI"], report_thr["U_LO"]
-
-    df["y_bottleneck"] = (
-        ((df["q_time_min_future"].fillna(0) >= q) & ((df["wait_ratio_future"].fillna(0) >= w) | (df["wip_future"].fillna(0) >= wip_thr))) |
-        (df["available_tool_ratio_future"].fillna(0) <= a) |
-        ((df["max_util_future"].fillna(0) >= u_hi) & (df["utilization_avg_future"].fillna(0) < u_lo)) |
-        ((df["max_avg_q_time_future"].fillna(0) >= q_max) & (df["wait_ratio_future"].fillna(0) < w))
-    ).astype("int8")
+    # [MLOps] 라이브 라벨링(label_predictions.py)과 동일한 공유 룰로 라벨 산출
+    future_kpi = df[[f"{c}_future" for c in LABEL_KPI_COLS]].rename(
+        columns={f"{c}_future": c for c in LABEL_KPI_COLS}
+    )
+    df["y_bottleneck"] = apply_label_rule(future_kpi, report_thr)
 
     # 2. T-120 Delta Feature Engineering
     past = df[[*keys, *DELTA_KPI_COLS]].copy()
@@ -203,6 +200,10 @@ def preprocess_data():
         raise ValueError(f"Run ID '{target_run_id}'에 해당하는 데이터가 DB에 없습니다.")
 
     report_thr = compute_report_thresholds(df_wide)
+    # [MLOps] 라이브 라벨링이 학습과 동일 임계값을 쓰도록 분위수 cutoff 영속화
+    thr_path = OUT_DIR / "label_thresholds.csv"
+    report_thr.to_frame("value").to_csv(thr_path)
+    print(f"Saved label thresholds → {thr_path}")
     df_processed = process_features_and_labels(df_wide, report_thr)
     
     train, val, test = temporal_split(df_processed)

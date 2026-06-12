@@ -10,6 +10,8 @@ pipeline {
         POSTGRES_PASSWORD = "fabbear_pw"
         POSTGRES_DB = "fabbear"
         POSTGRES_SCHEMA = "simulation"
+        // [MLOps] 공유 MLflow Tracking 서버 (컨테이너 → 호스트 5500)
+        MLFLOW_TRACKING_URI = "http://host.docker.internal:5500"
     }
 
     stages {
@@ -26,7 +28,7 @@ pipeline {
                 sh '''
                 python3 -m venv .venv
                 .venv/bin/pip install --no-cache-dir -r simulation/requirements.txt
-                .venv/bin/pip install mlflow xgboost scikit-learn pandas requests shap pyarrow
+                .venv/bin/pip install mlflow==3.13.0 xgboost scikit-learn pandas requests shap pyarrow
                 '''
             }
         }

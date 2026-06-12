@@ -1,3 +1,4 @@
+import os
 import mlflow
 from mlflow.tracking import MlflowClient
 import sys
@@ -7,6 +8,8 @@ MIN_F1_SCORE = 0.70
 
 def validate_and_promote():
     print("Starting Model Validation...")
+    # [MLOps] 공유 MLflow Tracking 서버로 연결 (미설정 시 로컬 5500 기본값)
+    mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5500"))
     client = MlflowClient()
     
     # 1. 모델 레지스트리에서 가장 최근에 등록된 버전 찾기

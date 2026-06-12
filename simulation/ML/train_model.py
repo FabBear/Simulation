@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 import mlflow
@@ -44,6 +45,8 @@ def run_training_pipeline():
     scale_pos_weight = float((_y_train == 0).sum() / max(1, (_y_train == 1).sum()))
     print(f"Calculated scale_pos_weight: {scale_pos_weight:.4f}")
     
+    # [MLOps] 공유 MLflow Tracking 서버로 연결 (미설정 시 로컬 5500 기본값)
+    mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5500"))
     mlflow.set_experiment("FabGuard_Bottleneck_Prediction")
     with mlflow.start_run() as run:
         mlflow.xgboost.autolog()
@@ -93,6 +96,11 @@ def run_training_pipeline():
         stats_csv_path = PROCESSED_DIR / "tg_minmax_stats.csv"
         if stats_csv_path.exists():
             mlflow.log_artifact(str(stats_csv_path))
+
+        # [MLOps] 라이브 라벨링이 학습과 동일 임계값을 쓰도록 분위수 cutoff 아티팩트 로깅
+        thr_csv_path = PROCESSED_DIR / "label_thresholds.csv"
+        if thr_csv_path.exists():
+            mlflow.log_artifact(str(thr_csv_path))
             
 if __name__ == "__main__":
     run_training_pipeline()

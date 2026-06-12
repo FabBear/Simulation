@@ -1,11 +1,5 @@
 pipeline {
-    agent {
-        docker {
-            image 'python:3.11-slim'
-            // 필요 시 DB, MLflow 통신을 위해 컨테이너의 네트워크 설정 추가
-            args '-v ${WORKSPACE}:/app -w /app'
-        }
-    }
+    agent any
     
     environment {
         PYTHONPATH = "${WORKSPACE}/simulation"
@@ -24,9 +18,11 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 echo 'Installing Python dependencies...'
-                sh 'pip install --no-cache-dir -r simulation/requirements.txt'
-                // 모니터링/Jenkins 트리거를 위해 필요한 패키지
-                sh 'pip install mlflow xgboost scikit-learn pandas requests shap pyarrow'
+                sh '''
+                python3 -m venv .venv
+                .venv/bin/pip install --no-cache-dir -r simulation/requirements.txt
+                .venv/bin/pip install mlflow xgboost scikit-learn pandas requests shap pyarrow
+                '''
             }
         }
         
@@ -34,14 +30,14 @@ pipeline {
             steps {
                 echo 'Running Data Preprocessing...'
                 // TODO: data_preprocessing.py 내부가 PostgreSQL을 읽어오도록 수정되어야 합니다.
-                sh 'python simulation/ML/data_preprocessing.py'
+                sh '.venv/bin/python simulation/ML/data_preprocessing.py'
             }
         }
         
         stage('Model Training & Logging') {
             steps {
                 echo 'Training XGBoost Model and Registering to MLflow...'
-                sh 'python simulation/ML/train_model.py'
+                sh '.venv/bin/python simulation/ML/train_model.py'
             }
         }
         
@@ -49,7 +45,7 @@ pipeline {
             steps {
                 echo 'Validating newly trained model and promoting to Production...'
                 // 모델의 지표를 평가하여 통과 시에만 Production으로 승격합니다. 실패 시 파이프라인 중단.
-                sh 'python simulation/ML/validate_model.py'
+                sh '.venv/bin/python simulation/ML/validate_model.py'
             }
         }
     }

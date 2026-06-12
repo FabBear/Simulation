@@ -97,8 +97,14 @@ def load_and_merge_data(run_id: str) -> pd.DataFrame:
         tg_wide["snapshot_time"] = tg_wide["snapshot_time"].astype(float)
 
     wide = tg_wide.merge(tool_agg, on=["snapshot_time", "toolgroup"], how="left")
-    wide["max_util"] = wide["max_util"].fillna(0.0)
-    wide["max_avg_q_time"] = wide["max_avg_q_time"].fillna(0.0)
+    
+    # [MLOps] 빈 데이터프레임 병합 시 에러 방어 로직
+    for col in ["max_util", "max_avg_q_time"]:
+        if col not in wide.columns:
+            wide[col] = 0.0
+        else:
+            wide[col] = wide[col].fillna(0.0)
+            
     return wide
 
 def compute_report_thresholds(ref: pd.DataFrame) -> pd.Series:
@@ -181,10 +187,10 @@ def preprocess_data():
     """전체 데이터 전처리 파이프라인을 실행합니다."""
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     
-    # [MLOps] DB에서 최신 run_id를 자동으로 조회하여 사용 (하드코딩 제거)
+    # [MLOps] 실제로 KPI 데이터가 존재하는 테이블(kpi_toolgroup)에서 최신 run_id를 조회
     with engine.connect() as conn:
-        latest_run = conn.execute(text("SELECT run_id FROM simulation_run ORDER BY imported_at DESC LIMIT 1")).scalar()
-        target_run_id = latest_run if latest_run else 'ece173272af7'
+        latest_run = conn.execute(text("SELECT run_id FROM kpi_toolgroup ORDER BY snapshot_time DESC LIMIT 1")).scalar()
+        target_run_id = latest_run if latest_run else '82a6c5db26e7'
         
     print(f"Target Run ID: {target_run_id}")
     

@@ -1,9 +1,16 @@
 import pandas as pd
 import numpy as np
+import sys
 from pathlib import Path
 from typing import Literal, Tuple, List, Dict
 
 _ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
+
+# [MLOps] DB 연동을 위한 모듈 추가
+from sqlalchemy import text
+from database import engine
+
 CSV_DIR = _ROOT / "sim_csv_out"
 OUT_DIR = Path(__file__).resolve().parent / "processed_data"
 
@@ -34,11 +41,17 @@ LABEL_KPI_COLS = [
 DELTA_KPI_COLS = ["q_time_min", "wait_ratio", "wip", "max_util", "utilization_avg"]
 TG_MINMAX_SCALE_COLS = list(dict.fromkeys([*LABEL_KPI_COLS, "setup_ratio_avg"] + [f"{c}_delta_120" for c in DELTA_KPI_COLS]))
 
-def load_and_merge_data(tg_path: Path, tool_path: Path) -> pd.DataFrame:
-    """TG 및 Tool 단위 KPI 데이터를 로드하고 wide 형식으로 병합합니다."""
-    print(f"Loading TG data from {tg_path}...")
-    tg_long = pd.read_csv(tg_path, usecols=["snapshot_time", "scope", "kpi_name", "value", "window_minutes"])
-    tg_long = tg_long.rename(columns={"scope": "toolgroup"})
+def load_and_merge_data(run_id: str) -> pd.DataFrame:
+    """PostgreSQL DB에서 특정 run_id의 TG 및 Tool 단위 KPI 데이터를 로드하고 wide 형식으로 병합합니다."""
+    print(f"Loading TG data from DB for run_id='{run_id}'...")
+    
+    # [MLOps] public.kpi_toolgroup 테이블에서 필요한 데이터만 Raw SQL로 조회 (메모리 최적화)
+    tg_query = text("""
+        SELECT snapshot_time, scope AS toolgroup, kpi_name, value, window_minutes
+        FROM public.kpi_toolgroup
+        WHERE run_id = :run_id
+    """)
+    tg_long = pd.read_sql(tg_query, engine, params={"run_id": run_id})
     tg_long["snapshot_time"] = tg_long["snapshot_time"].astype(float)
 
     instant = tg_long[tg_long["window_minutes"].isna() | (tg_long["window_minutes"] == "")]
@@ -49,23 +62,27 @@ def load_and_merge_data(tg_path: Path, tool_path: Path) -> pd.DataFrame:
     tg_wide_util = util.pivot_table(index=["snapshot_time", "toolgroup"], columns="kpi_name", values="value", aggfunc="first").reset_index()
     tg_wide = tg_wide.merge(tg_wide_util, on=["snapshot_time", "toolgroup"], how="outer")
 
-    print(f"Loading Tool data from {tool_path} by chunks...")
+    print(f"Loading Tool data from DB for run_id='{run_id}'...")
     def tool_id_to_toolgroup(tool_id: str) -> str:
         return tool_id.rsplit("#", 1)[0] if "#" in tool_id else tool_id
 
-    parts = []
-    reader = pd.read_csv(tool_path, chunksize=2_000_000, usecols=["snapshot_time", "scope", "kpi_name", "value"])
-    for chunk in reader:
-        chunk = chunk[chunk["kpi_name"].isin(TOOL_KPIS.keys())]
-        if chunk.empty:
-            continue
-        chunk["toolgroup"] = chunk["scope"].map(tool_id_to_toolgroup)
-        chunk["snapshot_time"] = chunk["snapshot_time"].astype(float)
-        g = chunk.groupby(["snapshot_time", "toolgroup", "kpi_name"], as_index=False)["value"].max()
-        parts.append(g)
-
-    tool_combined = pd.concat(parts, ignore_index=True)
-    tool_combined = tool_combined.groupby(["snapshot_time", "toolgroup", "kpi_name"], as_index=False)["value"].max()
+    # [MLOps] 대용량 kpi_tool 테이블은 WHERE 조건으로 필터링하여 DB단에서 데이터 량을 줄여서 쿼리
+    # 덕분에 청크(chunk) 처리가 불필요해지고 OOM 방지 및 성능이 크게 향상됨
+    tool_query = text("""
+        SELECT snapshot_time, scope, kpi_name, value
+        FROM public.kpi_tool
+        WHERE run_id = :run_id
+          AND kpi_name IN ('utilization', 'avg_q_time')
+    """)
+    tool_long = pd.read_sql(tool_query, engine, params={"run_id": run_id})
+    
+    if not tool_long.empty:
+        tool_long["toolgroup"] = tool_long["scope"].map(tool_id_to_toolgroup)
+        tool_long["snapshot_time"] = tool_long["snapshot_time"].astype(float)
+        tool_combined = tool_long.groupby(["snapshot_time", "toolgroup", "kpi_name"], as_index=False)["value"].max()
+    else:
+        tool_combined = pd.DataFrame(columns=["snapshot_time", "toolgroup", "kpi_name", "value"])
+        
     tool_agg = tool_combined.pivot(index=["snapshot_time", "toolgroup"], columns="kpi_name", values="value").reset_index()
     tool_agg = tool_agg.rename(columns=TOOL_KPIS)
 
@@ -154,7 +171,9 @@ def preprocess_data():
     """전체 데이터 전처리 파이프라인을 실행합니다."""
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     
-    df_wide = load_and_merge_data(CSV_DIR / "kpi_toolgroup.csv", CSV_DIR / "kpi_tool.csv")
+    # [MLOps] DB에서 가져올 특정 run_id 지정
+    target_run_id = 'ece173272af7'
+    df_wide = load_and_merge_data(target_run_id)
     report_thr = compute_report_thresholds(df_wide)
     df_processed = process_features_and_labels(df_wide, report_thr)
     

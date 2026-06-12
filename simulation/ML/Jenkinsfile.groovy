@@ -3,8 +3,12 @@ pipeline {
     
     environment {
         PYTHONPATH = "${WORKSPACE}/simulation"
-        // MLflow 서버 주소가 외부에 있을 경우 환경변수로 세팅
-        // MLFLOW_TRACKING_URI = "http://your-mlflow-server:5000"
+        // Docker 내부에서 Mac 호스트의 DB에 접속하기 위한 특수 주소
+        POSTGRES_HOST = "host.docker.internal"
+        POSTGRES_PORT = "5432"
+        POSTGRES_USER = "postgres"
+        POSTGRES_PASSWORD = "postgres"
+        POSTGRES_DB = "postgres"
     }
 
     stages {

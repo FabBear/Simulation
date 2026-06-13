@@ -1,13 +1,117 @@
+# Environment variables
 .env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# OS
 .DS_Store
-**/__pycache__/
-**/*.pyc
-simulation/.venv/
+Thumbs.db
+
+# Editor / IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.iml
+*.ipr
+*.iws
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Python / FastAPI
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+ENV/
+pip-wheel-metadata/
+*.egg-info/
+.eggs/
+dist/
+build/
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.coverage
+.coverage.*
+coverage.xml
+
+# Jupyter / notebooks
+.ipynb_checkpoints/
+
+# Test / report output
+coverage/
+reports/
+test-results/
+
+# Database / local files
+*.db
+*.sqlite
+*.sqlite3
+*.h2.db
+*.mv.db
+*.trace.db
+
+# Docker / local compose overrides
+docker-compose.override.yml
+compose.override.yml
+
+# Uploads / generated files
+uploads/
+tmp/
+temp/
+
+# ML / Model artifacts
+*.pt
+*.ckpt
+*.bin
+*.safetensors
+*.gguf
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Vector store / embeddings
+chroma/
+faiss_index/
+*.faiss
+*.pkl
+
+# LangChain / LangSmith cache
+.langchain.db
+langchain.db
+
+# Hugging Face cache
+.cache/huggingface/
+
+# uv
+.uv-cache/
+
+# Simulation output
 simulation/sim_csv_out/
 simulation/sim_csv_*/
-simulation/logs/
-spring-backend/build/
-spring-backend/.gradle/
+simulation/sim_forward_out/
+simulation/sim_verify_out/
+simulation/scenario_out/
+simulation/e2e_reports/
+simulation/out/
 simulation/sample_csv/*.csv
 !simulation/sample_csv/.gitkeep
-simulation/out/
+
+# Spring Backend build
+spring-backend/build/
+spring-backend/.gradle/
+spring-backend/bin/

@@ -1,0 +1,42 @@
+comment: |
+  PR 제목을 기준으로 라벨을 자동 부여했습니다.
+  필요할 경우 라벨을 수정하거나 추가해 주세요.
+
+labels:
+  "✨ Feature":
+    - '.*\[FEAT\].*'
+
+  "🐞 BugFix":
+    - '.*\[FIX\].*'
+    - '.*\[BUG\].*'
+
+  "🤖 Model":
+    - '.*\[MODEL\].*'
+
+  "📊 Data":
+    - '.*\[DATA\].*'
+
+  "🔬 Experiment":
+    - '.*\[EXP\].*'
+    - '.*\[EXPERIMENT\].*'
+
+  "⚙️ Pipeline":
+    - '.*\[PIPELINE\].*'
+
+  "⚙️ Infra":
+    - '.*\[INFRA\].*'
+    - '.*\[CI\].*'
+    - '.*\[CD\].*'
+    - '.*\[DOCKER\].*'
+
+  "🛠️ Refactor":
+    - '.*\[REFACTOR\].*'
+
+  "🧹 Chore":
+    - '.*\[CHORE\].*'
+
+  "📄 Docs":
+    - '.*\[DOCS\].*'
+
+  "🔥 Hotfix":
+    - '.*\[HOTFIX\].*'

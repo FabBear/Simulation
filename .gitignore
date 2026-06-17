@@ -3,115 +3,71 @@
 .env.*
 !.env.example
 
-# Logs
-logs/
-*.log
+# Python
+**/__pycache__/
+**/*.pyc
+simulation/.venv/
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+.eggs/
+
+# Simulation & Backend
+simulation/sim_csv_out/
+simulation/sim_csv_*/
+simulation/logs/
+simulation/out/
+simulation/sample_csv/*.csv
+!simulation/sample_csv/.gitkeep
+spring-backend/build/
+spring-backend/.gradle/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# ML artifacts (대용량 파일 — DVC나 S3로 관리)
+*.pkl
+*.joblib
+*.pt
+*.pth
+*.h5
+*.onnx
+*.ckpt
+checkpoints/
+models/
+
+# Experiment tracking
+mlruns/
+mlartifacts/
+wandb/
+.neptune/
+
+# Data files (대용량 — DVC나 S3로 관리)
+data/raw/
+data/processed/
+*.parquet
+*.feather
+
+# Test / coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Lint / type check
+.ruff_cache/
+.mypy_cache/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Editor / IDE
-.idea/
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
-*.iml
-*.ipr
-*.iws
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# Python / FastAPI
-__pycache__/
-*.py[cod]
-*$py.class
-.Python
-.venv/
-venv/
-env/
-ENV/
-pip-wheel-metadata/
-*.egg-info/
-.eggs/
-dist/
-build/
-htmlcov/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.pyre/
-.coverage
-.coverage.*
-coverage.xml
-
-# Jupyter / notebooks
-.ipynb_checkpoints/
-
-# Test / report output
-coverage/
-reports/
-test-results/
-
-# Database / local files
-*.db
-*.sqlite
-*.sqlite3
-*.h2.db
-*.mv.db
-*.trace.db
-
-# Docker / local compose overrides
+# Docker
 docker-compose.override.yml
-compose.override.yml
 
-# Uploads / generated files
-uploads/
-tmp/
-temp/
-
-# ML / Model artifacts
-*.pt
-*.ckpt
-*.bin
-*.safetensors
-*.gguf
-
-# MLflow
-mlruns/
-mlartifacts/
-
-# Vector store / embeddings
-chroma/
-faiss_index/
-*.faiss
-*.pkl
-
-# LangChain / LangSmith cache
-.langchain.db
-langchain.db
-
-# Hugging Face cache
-.cache/huggingface/
-
-# uv
-.uv-cache/
-
-# Simulation output
-simulation/sim_csv_out/
-simulation/sim_csv_*/
-simulation/sim_forward_out/
-simulation/sim_verify_out/
-simulation/scenario_out/
-simulation/e2e_reports/
-simulation/out/
-simulation/sample_csv/*.csv
-!simulation/sample_csv/.gitkeep
-
-# Spring Backend build
-spring-backend/build/
-spring-backend/.gradle/
-spring-backend/bin/
+# Logs
+logs/
+*.log

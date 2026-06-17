@@ -10,4 +10,7 @@ gymnasium
 stable-baselines3
 scipy
 statsmodels
+scikit-learn
+xgboost
+shap
 pytest

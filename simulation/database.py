@@ -3,6 +3,7 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 import os
 
 from schema_config import DB_SCHEMA
@@ -54,7 +55,11 @@ else:
     DATABASE_URL = default_url
 
 # 1. 엔진(Engine) 시동: DB와 연결하는 본체
-engine = create_engine(DATABASE_URL)
+# NullPool: 이 프로세스는 단발성·단일스레드(SimPy) sim 러너다. 검증 시 sim 서브프로세스가
+# 다수 병렬 실행(플랜 3개 × workers 3개 ≥ 9개)되는데, 기본 QueuePool(idle 최대 15커넥션/프로세스)을
+# 쓰면 서브프로세스 수 × 15로 Postgres max_connections를 초과("too many clients already")한다.
+# NullPool은 idle 커넥션을 들고 있지 않아 프로세스당 실제 동시 사용분(≈1)만 점유한다.
+engine = create_engine(DATABASE_URL, poolclass=NullPool)
 
 
 @event.listens_for(engine, "connect")

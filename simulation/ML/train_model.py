@@ -89,7 +89,7 @@ def run_training_pipeline():
 
         # [MLOps] 모델 버전 관리용 레지스트리 등록
         # 주의: 여기서는 모델을 등록만 하고, Production 승격은 validate_model.py에서 수행합니다.
-        mlflow.register_model(model_uri=f"runs:/{run.info.run_id}/model", name="FabGuard_Bottleneck_Model")
+        mlflow.register_model(model_uri=f"runs:/{run.info.run_id}/model", name="FabBear_Bottleneck_Model")
         print("Model successfully registered to MLflow Registry.")
         
         # Save tg_minmax_stats.csv as artifact for Inference Pipeline

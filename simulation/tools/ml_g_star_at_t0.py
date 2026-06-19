@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -279,7 +280,7 @@ def _wide_tg_at_snapshot(
     raw = raw[raw["snapshot_time"].astype(float) == snap_use].copy()
     raw["snapshot_time"] = snap_use
 
-    tmp = csv_dir / ".ml_infer_tg_tmp.csv"
+    tmp = csv_dir / f".ml_infer_tg_tmp_{os.getpid()}.csv"
     raw.to_csv(tmp, index=False)
     try:
         wide = pivot_toolgroup_long(tmp)

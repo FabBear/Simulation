@@ -3,7 +3,7 @@ import mlflow
 from mlflow.tracking import MlflowClient
 import sys
 
-MODEL_NAME = "FabGuard_Bottleneck_Model"
+MODEL_NAME = "FabBear_Bottleneck_Model"
 MIN_F1_SCORE = 0.70
 
 def validate_and_promote():

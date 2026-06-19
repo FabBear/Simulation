@@ -13,7 +13,7 @@ PROCESSED_DIR = ML_DIR / "processed_data"
 OUT_DIR = _ROOT / "out" / "ml_g_star_e2e"
 
 # MLflow Model Registry URI 설정
-MODEL_NAME = "FabGuard_Bottleneck_Model"
+MODEL_NAME = "FabBear_Bottleneck_Model"
 MODEL_STAGE = "Production"
 MODEL_URI = f"models:/{MODEL_NAME}/{MODEL_STAGE}"
 ALARM_PROBA_THRESHOLD = 0.7  # 병목 알람 임계값

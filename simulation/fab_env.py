@@ -421,7 +421,13 @@ class FabEnv(gym.Env):
             master_release_spawned = self._build_simulation(db)
             if scenario_obj is not None:
                 self._apply_scenario_overrides(db, scenario_obj)
-            # Keep ORM rows usable after session close (PM/BD SimPy processes).
+            # commit() in _apply_scenario_overrides expires all ORM objects.
+            # Refresh pm/breakdown rows while the session is still alive so their
+            # column values are cached in __dict__ before expunge.
+            for pm in self.pms:
+                db.refresh(pm)
+            for bd in self.breakdowns:
+                db.refresh(bd)
             db.expunge_all()
         finally:
             db.close()
